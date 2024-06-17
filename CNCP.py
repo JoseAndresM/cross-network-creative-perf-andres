@@ -55,69 +55,71 @@ if prev_file and new_file:
     prev_data = load_tested_creatives(prev_file)
     new_data = pd.read_csv(new_file)
     
-    exclude_creative_ids = [
-        'Search SearchPartners', 'Search GoogleSearch', 'Youtube YouTubeVideos',
-        'Display', 'TTCC_0021_Ship Craft - Gaming App'
-    ]
-    new_data = new_data[~new_data['creative_network'].isin(exclude_creative_ids)]
-    new_data['creative_id'] = new_data.apply(lambda row: extract_creative_id(row['creative_network'], row['channel']), axis=1)
-    new_data = new_data[new_data['creative_id'] != 'unknown']
-    
-    simplified_creatives_by_network = new_data.pivot_table(index='creative_id', columns='channel', aggfunc='size', fill_value=0)
-    simplified_creatives_by_network_bool = simplified_creatives_by_network.applymap(lambda x: x > 0)
-    simplified_creatives_by_network_binary = simplified_creatives_by_network_bool.astype(int)
-    simplified_creatives_by_network_binary_df = simplified_creatives_by_network_binary.reset_index()
-    updated_tested_creatives = update_tested_creatives(prev_data, simplified_creatives_by_network_binary_df)
-    
-    aggregated_data = new_data.groupby('creative_id').agg({
-        'impressions': 'sum',
-        'cost': 'sum',
-        'installs': 'sum'
-    }).reset_index()
-    aggregated_data['IPM'] = (aggregated_data['installs'] / aggregated_data['impressions']) * 1000
-    aggregated_data['IPM'].replace([float('inf'), -float('inf')], 0, inplace=True)
-    
-    Q1 = aggregated_data['IPM'].quantile(0.25)
-    Q3 = aggregated_data['IPM'].quantile(0.75)
-    IQR = Q3 - Q1
-    lower_bound = Q1 - 1.5 * IQR
-    upper_bound = Q3 + 1.5 * IQR
-    aggregated_data = aggregated_data[(aggregated_data['IPM'] >= lower_bound) & (aggregated_data['IPM'] <= upper_bound)]
-    
-    average_ipm = aggregated_data['IPM'].mean()
-    average_cost = aggregated_data['cost'].mean()
-    
-    aggregated_data['Category'] = aggregated_data.apply(lambda row: categorize_creative(row, average_ipm, average_cost, impressions_threshold, cost_threshold, ipm_threshold), axis=1)
-    overall_output = aggregated_data.to_csv(index=False)
-    
-    channel_aggregated_data = new_data.groupby(['creative_id', 'channel']).agg({
-        'impressions': 'sum',
-        'cost': 'sum',
-        'installs': 'sum'
-    }).reset_index()
-    channel_aggregated_data['IPM'] = (channel_aggregated_data['installs'] / channel_aggregated_data['impressions']) * 1000
-    channel_aggregated_data['IPM'].replace([float('inf'), -float('inf')], 0, inplace=True)
-    
-    channel_average_ipm = channel_aggregated_data['IPM'].mean()
-    channel_aggregated_data['Category'] = channel_aggregated_data.apply(lambda row: categorize_creative(row, channel_average_ipm, average_cost, impressions_threshold, cost_threshold, ipm_threshold), axis=1)
-    
-    discrepancies = []
-    for creative_id in channel_aggregated_data['creative_id'].unique():
-        creative_data = channel_aggregated_data[channel_aggregated_data['creative_id'] == creative_id]
-        categories = creative_data['Category'].unique()
-        if len(categories) > 1:
-            discrepancies.append({
-                'creative_id': creative_id,
-                'networks': creative_data['channel'].tolist(),
-                'categories': creative_data['Category'].tolist()
-            })
-    discrepancies_df = pd.DataFrame(discrepancies)
-    
-    channel_output = channel_aggregated_data.to_csv(index=False)
-    discrepancies_output = discrepancies_df.to_csv(index=False)
-    
-    st.download_button("Download Updated Tested Creatives CSV", updated_tested_creatives.to_csv(index=False).encode('utf-8'), "updated_tested_creatives.csv")
-    st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
-    st.download_button("Download Channel Creative Performance CSV", channel_output.encode('utf-8'), "Channel_Creative_Performance.csv")
-    st.download_button("Download Discrepancies Report CSV", discrepancies_output.encode('utf-8'), "Discrepancies_Report.csv")
-
+    if 'creative_network' not in new_data.columns:
+        st.error("The uploaded new report CSV does not contain a 'creative_network' column.")
+    else:
+        exclude_creative_ids = [
+            'Search SearchPartners', 'Search GoogleSearch', 'Youtube YouTubeVideos',
+            'Display', 'TTCC_0021_Ship Craft - Gaming App'
+        ]
+        new_data = new_data[~new_data['creative_network'].isin(exclude_creative_ids)]
+        new_data['creative_id'] = new_data.apply(lambda row: extract_creative_id(row['creative_network'], row['channel']), axis=1)
+        new_data = new_data[new_data['creative_id'] != 'unknown']
+        
+        simplified_creatives_by_network = new_data.pivot_table(index='creative_id', columns='channel', aggfunc='size', fill_value=0)
+        simplified_creatives_by_network_bool = simplified_creatives_by_network.applymap(lambda x: x > 0)
+        simplified_creatives_by_network_binary = simplified_creatives_by_network_bool.astype(int)
+        simplified_creatives_by_network_binary_df = simplified_creatives_by_network_binary.reset_index()
+        updated_tested_creatives = update_tested_creatives(prev_data, simplified_creatives_by_network_binary_df)
+        
+        aggregated_data = new_data.groupby('creative_id').agg({
+            'impressions': 'sum',
+            'cost': 'sum',
+            'installs': 'sum'
+        }).reset_index()
+        aggregated_data['IPM'] = (aggregated_data['installs'] / aggregated_data['impressions']) * 1000
+        aggregated_data['IPM'].replace([float('inf'), -float('inf')], 0, inplace=True)
+        
+        Q1 = aggregated_data['IPM'].quantile(0.25)
+        Q3 = aggregated_data['IPM'].quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        aggregated_data = aggregated_data[(aggregated_data['IPM'] >= lower_bound) & (aggregated_data['IPM'] <= upper_bound)]
+        
+        average_ipm = aggregated_data['IPM'].mean()
+        average_cost = aggregated_data['cost'].mean()
+        
+        aggregated_data['Category'] = aggregated_data.apply(lambda row: categorize_creative(row, average_ipm, average_cost, impressions_threshold, cost_threshold, ipm_threshold), axis=1)
+        overall_output = aggregated_data.to_csv(index=False)
+        
+        channel_aggregated_data = new_data.groupby(['creative_id', 'channel']).agg({
+            'impressions': 'sum',
+            'cost': 'sum',
+            'installs': 'sum'
+        }).reset_index()
+        channel_aggregated_data['IPM'] = (channel_aggregated_data['installs'] / channel_aggregated_data['impressions']) * 1000
+        channel_aggregated_data['IPM'].replace([float('inf'), -float('inf')], 0, inplace=True)
+        
+        channel_average_ipm = channel_aggregated_data['IPM'].mean()
+        channel_aggregated_data['Category'] = channel_aggregated_data.apply(lambda row: categorize_creative(row, channel_average_ipm, average_cost, impressions_threshold, cost_threshold, ipm_threshold), axis=1)
+        
+        discrepancies = []
+        for creative_id in channel_aggregated_data['creative_id'].unique():
+            creative_data = channel_aggregated_data[channel_aggregated_data['creative_id'] == creative_id]
+            categories = creative_data['Category'].unique()
+            if len(categories) > 1:
+                discrepancies.append({
+                    'creative_id': creative_id,
+                    'networks': creative_data['channel'].tolist(),
+                    'categories': creative_data['Category'].tolist()
+                })
+        discrepancies_df = pd.DataFrame(discrepancies)
+        
+        channel_output = channel_aggregated_data.to_csv(index=False)
+        discrepancies_output = discrepancies_df.to_csv(index=False)
+        
+        st.download_button("Download Updated Tested Creatives CSV", updated_tested_creatives.to_csv(index=False).encode('utf-8'), "updated_tested_creatives.csv")
+        st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
+        st.download_button("Download Channel Creative Performance CSV", channel_output.encode('utf-8'), "Channel_Creative_Performance.csv")
+        st.download_button("Download Discrepancies Report CSV", discrepancies_output.encode('utf-8'), "Discrepancies_Report.csv")
