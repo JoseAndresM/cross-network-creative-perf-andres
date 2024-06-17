@@ -1,11 +1,10 @@
 import streamlit as st
 import pandas as pd
-import os
 
 # Function to load previous tested creatives
-def load_tested_creatives(file_path):
-    if os.path.exists(file_path):
-        return pd.read_csv(file_path)
+def load_tested_creatives(uploaded_file):
+    if uploaded_file is not None:
+        return pd.read_csv(uploaded_file)
     else:
         return pd.DataFrame(columns=['creative_id', 'Facebook', 'Google Ads', 'Google Organic Search', 'Organic', 'Snapchat', 'TikTok for Business', 'Untrusted Devices'])
 
@@ -121,3 +120,4 @@ if prev_file and new_file:
     st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
     st.download_button("Download Channel Creative Performance CSV", channel_output.encode('utf-8'), "Channel_Creative_Performance.csv")
     st.download_button("Download Discrepancies Report CSV", discrepancies_output.encode('utf-8'), "Discrepancies_Report.csv")
+
