@@ -14,14 +14,17 @@ def update_tested_creatives(prev_data, new_data):
     return combined_data
 
 # Function to extract only the creative identifier (game acronym, concept number, and version number) ignoring format and localization
-def extract_creative_id(name, channel):
+def extract_creative_id(name, channel, game_code):
     if channel == 'Applovin':
         parts = name.split('_')
         for i in range(len(parts) - 2):
-            if parts[i].startswith('SHI') and (parts[i+1].startswith('C') or parts[i+1].startswith('R') or parts[i+2].startswith('V')):
+            if parts[i] == game_code and (parts[i+1].startswith('C') or parts[i+1].startswith('R') or parts[i+2].startswith('E')):
                 return '_'.join(parts[i:i+3])
     else:
-        return '_'.join(name.split('_')[:3])
+        parts = name.split('_')
+        for i in range(len(parts) - 2):
+            if parts[i] == game_code:
+                return '_'.join(parts[i:i+3])
     return name
 
 # Function to categorize creatives
@@ -45,13 +48,17 @@ st.sidebar.header("Upload Files")
 prev_file = st.sidebar.file_uploader("Upload Previous Tested Creatives CSV", type="csv")
 new_file = st.sidebar.file_uploader("Upload New Report CSV", type="csv")
 
+# Game code input
+st.sidebar.header("Game Code")
+game_code = st.sidebar.text_input("Enter the 3-letter game code (e.g., CRC)")
+
 # Threshold settings
 st.sidebar.header("Threshold Settings")
 impressions_threshold = st.sidebar.number_input("Impressions Threshold", min_value=1000, value=2000, step=100)
 cost_threshold = st.sidebar.slider("Cost Threshold Multiplier", min_value=0.0, max_value=2.0, value=1.1, step=0.1)
 ipm_threshold = st.sidebar.slider("IPM Threshold Multiplier", min_value=0.0, max_value=2.0, value=1.1, step=0.1)
 
-if prev_file and new_file:
+if prev_file and new_file and game_code:
     prev_data = load_tested_creatives(prev_file)
     new_data = pd.read_csv(new_file)
     
@@ -63,7 +70,7 @@ if prev_file and new_file:
             'Display', 'TTCC_0021_Ship Craft - Gaming App'
         ]
         new_data = new_data[~new_data['creative_network'].isin(exclude_creative_ids)]
-        new_data['creative_id'] = new_data.apply(lambda row: extract_creative_id(row['creative_network'], row['channel']), axis=1)
+        new_data['creative_id'] = new_data.apply(lambda row: extract_creative_id(row['creative_network'], row['channel'], game_code), axis=1)
         new_data = new_data[new_data['creative_id'] != 'unknown']
         
         simplified_creatives_by_network = new_data.pivot_table(index='creative_id', columns='channel', aggfunc='size', fill_value=0)
@@ -108,18 +115,4 @@ if prev_file and new_file:
         for creative_id in channel_aggregated_data['creative_id'].unique():
             creative_data = channel_aggregated_data[channel_aggregated_data['creative_id'] == creative_id]
             categories = creative_data['Category'].unique()
-            if len(categories) > 1:
-                discrepancies.append({
-                    'creative_id': creative_id,
-                    'networks': creative_data['channel'].tolist(),
-                    'categories': creative_data['Category'].tolist()
-                })
-        discrepancies_df = pd.DataFrame(discrepancies)
-        
-        channel_output = channel_aggregated_data.to_csv(index=False)
-        discrepancies_output = discrepancies_df.to_csv(index=False)
-        
-        st.download_button("Download Updated Tested Creatives CSV", updated_tested_creatives.to_csv(index=False).encode('utf-8'), "updated_tested_creatives.csv")
-        st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
-        st.download_button("Download Channel Creative Performance CSV", channel_output.encode('utf-8'), "Channel_Creative_Performance.csv")
-        st.download_button("Download Discrepancies Report CSV", discrepancies_output.encode('utf-8'), "Discrepancies_Report.csv")
+            if len(categories
