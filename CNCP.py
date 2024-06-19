@@ -115,4 +115,19 @@ if prev_file and new_file and game_code:
         for creative_id in channel_aggregated_data['creative_id'].unique():
             creative_data = channel_aggregated_data[channel_aggregated_data['creative_id'] == creative_id]
             categories = creative_data['Category'].unique()
-            if len(categories
+            if len(categories) > 1:
+                discrepancies.append({
+                    'creative_id': creative_id,
+                    'networks': creative_data['channel'].tolist(),
+                    'categories': creative_data['Category'].tolist()
+                })
+        discrepancies_df = pd.DataFrame(discrepancies)
+        
+        channel_output = channel_aggregated_data.to_csv(index=False)
+        discrepancies_output = discrepancies_df.to_csv(index=False)
+        
+        st.download_button("Download Updated Tested Creatives CSV", updated_tested_creatives.to_csv(index=False).encode('utf-8'), "updated_tested_creatives.csv")
+        st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
+        st.download_button("Download Channel Creative Performance CSV", channel_output.encode('utf-8'), "Channel_Creative_Performance.csv")
+        st.download_button("Download Discrepancies Report CSV", discrepancies_output.encode('utf-8'), "Discrepancies_Report.csv")
+
