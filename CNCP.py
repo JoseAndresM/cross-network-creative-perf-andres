@@ -15,10 +15,16 @@ def update_tested_creatives(prev_data, new_data):
 
 # Function to extract only the creative identifier (game acronym, concept number, and version number) ignoring format and localization
 def extract_creative_id(name, channel, game_code):
-    parts = name.split('_')
-    for i in range(len(parts) - 2):
-        if parts[i] == game_code:
-            return '_'.join(parts[i:i+3])
+    if channel == 'Applovin':
+        parts = name.split('_')
+        for i in range(len(parts) - 2):
+            if parts[i] == game_code and (parts[i+1].startswith('C') or parts[i+1].startswith('R') or parts[i+2].startswith('E')):
+                return '_'.join(parts[i:i+3])
+    else:
+        parts = name.split('_')
+        for i in range(len(parts) - 2):
+            if parts[i] == game_code:
+                return '_'.join(parts[i:i+3])
     return name
 
 # Function to categorize creatives
@@ -52,7 +58,7 @@ impressions_threshold = st.sidebar.number_input("Impressions Threshold", min_val
 cost_threshold = st.sidebar.slider("Cost Threshold Multiplier", min_value=0.0, max_value=2.0, value=1.1, step=0.1)
 ipm_threshold = st.sidebar.slider("IPM Threshold Multiplier", min_value=0.0, max_value=2.0, value=1.1, step=0.1)
 
-if new_file and game_code:
+if prev_file and new_file and game_code:
     prev_data = load_tested_creatives(prev_file)
     new_data = pd.read_csv(new_file)
     
