@@ -79,7 +79,16 @@ if new_file and game_code:
         aggregated_data = new_data.groupby('creative_id').agg({
             'impressions': 'sum',
             'cost': 'sum',
-            'installs': 'sum'
+            'installs': 'sum',
+            'roas_d0': 'mean',
+            'roas_d3': 'mean',
+            'roas_d7': 'mean',
+            'retention_rate_d1': 'mean',
+            'retention_rate_d3': 'mean',
+            'retention_rate_d7': 'mean',
+            'lifetime_value_d0': 'mean',
+            'lifetime_value_d3': 'mean',
+            'lifetime_value_d7': 'mean'
         }).reset_index()
         aggregated_data['IPM'] = (aggregated_data['installs'] / aggregated_data['impressions']) * 1000
         aggregated_data['IPM'].replace([float('inf'), -float('inf')], 0, inplace=True)
@@ -100,7 +109,16 @@ if new_file and game_code:
         channel_aggregated_data = new_data.groupby(['creative_id', 'channel']).agg({
             'impressions': 'sum',
             'cost': 'sum',
-            'installs': 'sum'
+            'installs': 'sum',
+            'roas_d0': 'mean',
+            'roas_d3': 'mean',
+            'roas_d7': 'mean',
+            'retention_rate_d1': 'mean',
+            'retention_rate_d3': 'mean',
+            'retention_rate_d7': 'mean',
+            'lifetime_value_d0': 'mean',
+            'lifetime_value_d3': 'mean',
+            'lifetime_value_d7': 'mean'
         }).reset_index()
         channel_aggregated_data['IPM'] = (channel_aggregated_data['installs'] / channel_aggregated_data['impressions']) * 1000
         channel_aggregated_data['IPM'].replace([float('inf'), -float('inf')], 0, inplace=True)
@@ -127,4 +145,3 @@ if new_file and game_code:
         st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
         st.download_button("Download Channel Creative Performance CSV", channel_output.encode('utf-8'), "Channel_Creative_Performance.csv")
         st.download_button("Download Discrepancies Report CSV", discrepancies_output.encode('utf-8'), "Discrepancies_Report.csv")
-
