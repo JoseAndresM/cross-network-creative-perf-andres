@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 
 # Function to load previous tested creatives
 def load_tested_creatives(uploaded_file):
@@ -88,10 +89,17 @@ if new_file and game_code:
             'retention_rate_d7': 'mean',
             'lifetime_value_d0': 'mean',
             'lifetime_value_d3': 'mean',
-            'lifetime_value_d7': 'mean'
+            'lifetime_value_d7': 'mean',
+            'ecpi': 'mean'
         }).reset_index()
+
+        # Round aggregated metrics to 2 decimal places
+        for column in ['roas_d0', 'roas_d3', 'roas_d7', 'retention_rate_d1', 'retention_rate_d3', 'retention_rate_d7', 'lifetime_value_d0', 'lifetime_value_d3', 'lifetime_value_d7', 'ecpi']:
+            aggregated_data[column] = aggregated_data[column].round(2)
+        
         aggregated_data['IPM'] = (aggregated_data['installs'] / aggregated_data['impressions']) * 1000
         aggregated_data['IPM'].replace([float('inf'), -float('inf')], 0, inplace=True)
+        aggregated_data['IPM'] = aggregated_data['IPM'].round(2)
         
         Q1 = aggregated_data['IPM'].quantile(0.25)
         Q3 = aggregated_data['IPM'].quantile(0.75)
@@ -104,6 +112,10 @@ if new_file and game_code:
         average_cost = aggregated_data['cost'].mean()
         
         aggregated_data['Category'] = aggregated_data.apply(lambda row: categorize_creative(row, average_ipm, average_cost, impressions_threshold, cost_threshold, ipm_threshold), axis=1)
+        
+        # Add ROAS Mat. D3 column
+        aggregated_data['ROAS Mat. D3'] = (aggregated_data['roas_d3'] / aggregated_data['roas_d0']).replace([float('inf'), -float('inf'), np.nan], 0).round(2)
+        
         overall_output = aggregated_data.to_csv(index=False)
         
         channel_aggregated_data = new_data.groupby(['creative_id', 'channel']).agg({
@@ -118,10 +130,16 @@ if new_file and game_code:
             'retention_rate_d7': 'mean',
             'lifetime_value_d0': 'mean',
             'lifetime_value_d3': 'mean',
-            'lifetime_value_d7': 'mean'
+            'lifetime_value_d7': 'mean',
+            'ecpi': 'mean'
         }).reset_index()
+
+        for column in ['roas_d0', 'roas_d3', 'roas_d7', 'retention_rate_d1', 'retention_rate_d3', 'retention_rate_d7', 'lifetime_value_d0', 'lifetime_value_d3', 'lifetime_value_d7', 'ecpi']:
+            channel_aggregated_data[column] = channel_aggregated_data[column].round(2)
+        
         channel_aggregated_data['IPM'] = (channel_aggregated_data['installs'] / channel_aggregated_data['impressions']) * 1000
         channel_aggregated_data['IPM'].replace([float('inf'), -float('inf')], 0, inplace=True)
+        channel_aggregated_data['IPM'] = channel_aggregated_data['IPM'].round(2)
         
         channel_average_ipm = channel_aggregated_data['IPM'].mean()
         channel_aggregated_data['Category'] = channel_aggregated_data.apply(lambda row: categorize_creative(row, channel_average_ipm, average_cost, impressions_threshold, cost_threshold, ipm_threshold), axis=1)
@@ -145,4 +163,3 @@ if new_file and game_code:
         st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
         st.download_button("Download Channel Creative Performance CSV", channel_output.encode('utf-8'), "Channel_Creative_Performance.csv")
         st.download_button("Download Discrepancies Report CSV", discrepancies_output.encode('utf-8'), "Discrepancies_Report.csv")
-
