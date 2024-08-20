@@ -9,13 +9,13 @@ def load_tested_creatives(uploaded_file):
     else:
         return pd.DataFrame(columns=['creative_id', 'Facebook', 'Google Ads', 'Google Organic Search', 'Organic', 'Snapchat', 'TikTok for Business', 'Untrusted Devices'])
 
-# Function to extract only the creative identifier (concept number and version number) ignoring format and localization
+# Function to extract the creative identifier (game code, concept number, or raw recording, and version number)
 def extract_creative_id(name, game_code):
     parts = name.split('_')
     for i in range(len(parts) - 2):
-        if parts[i].startswith(game_code) and parts[i+2].startswith('V'):
-            return '_'.join(parts[i+1:i+3])
-    return '_'.join(name.split('_')[1:3])
+        if parts[i] == game_code and (parts[i+1].startswith('C') or parts[i+1].startswith('R')) and parts[i+2].startswith('V'):
+            return '_'.join([game_code, parts[i+1], parts[i+2]])
+    return '_'.join(parts[:3])
 
 # Function to categorize creatives
 def categorize_creative(row, average_ipm, average_cost, impressions_threshold, cost_threshold, ipm_threshold):
@@ -48,7 +48,13 @@ impressions_threshold = st.sidebar.number_input("Impressions Threshold", min_val
 cost_threshold = st.sidebar.slider("Cost Threshold Multiplier", min_value=0.0, max_value=2.0, value=1.1, step=0.1)
 ipm_threshold = st.sidebar.slider("IPM Threshold Multiplier", min_value=0.0, max_value=2.0, value=1.1, step=0.1)
 
+# First-time run toggle
+first_time_run = st.sidebar.checkbox("First-time run (No Previous Tested Creatives CSV)")
+
 if new_file and game_code:
+    # Load previous data if not first-time run
+    prev_data = load_tested_creatives(prev_file) if not first_time_run else pd.DataFrame(columns=['creative_id', 'Facebook', 'Google Ads', 'Google Organic Search', 'Organic', 'Snapchat', 'TikTok for Business', 'Untrusted Devices'])
+
     # Load and process new data
     new_data = pd.read_csv(new_file)
     
@@ -63,7 +69,7 @@ if new_file and game_code:
         new_data = new_data[~new_data['creative_network'].isin(exclude_creative_ids)]
         new_data = new_data[~new_data['creative_network'].str.startswith('TTCC')]
 
-        # Extract creative IDs at the C_V level
+        # Extract creative IDs using the game code, concept number, and version number
         new_data['creative_id'] = new_data.apply(lambda row: extract_creative_id(row['creative_network'], game_code), axis=1)
         new_data = new_data[new_data['creative_id'] != 'unknown']
         
@@ -110,6 +116,7 @@ if new_file and game_code:
         # Add ROAS Mat. D3 column
         aggregated_data['ROAS Mat. D3'] = (aggregated_data['roas_d3'] / aggregated_data['roas_d0']).replace([float('inf'), -float('inf'), np.nan], 0).round(2)
         
+        # Output the overall creative performance data as CSV
         overall_output = aggregated_data.to_csv(index=False)
         
         st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
