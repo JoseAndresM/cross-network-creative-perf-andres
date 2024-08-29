@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from scipy.stats import zscore
 
 # Function to load previous tested creatives
 def load_tested_creatives(uploaded_file):
@@ -30,6 +29,10 @@ def categorize_creative(row, average_ipm, average_cost, impressions_threshold, c
         return 'Low Performance'
     else:
         return 'Testing'
+
+# Function to calculate z-scores manually
+def calculate_zscore(series):
+    return (series - series.mean()) / series.std()
 
 # Sigmoid function
 def sigmoid(x):
@@ -126,10 +129,10 @@ if new_file and game_code:
         aggregated_data['ROAS_diff'] = aggregated_data['roas_d0'] - target_roas_d0
 
         # Calculate z-scores for necessary columns
-        aggregated_data['z_cost'] = zscore(aggregated_data['cost'])
-        aggregated_data['z_ROAS_diff'] = zscore(aggregated_data['ROAS_diff'])
-        aggregated_data['z_ROAS_Mat_D3'] = zscore(aggregated_data['roas_d3'] / aggregated_data['roas_d0'])
-        aggregated_data['z_IPM'] = zscore(aggregated_data['IPM'])
+        aggregated_data['z_cost'] = calculate_zscore(aggregated_data['cost'])
+        aggregated_data['z_ROAS_diff'] = calculate_zscore(aggregated_data['ROAS_diff'])
+        aggregated_data['z_ROAS_Mat_D3'] = calculate_zscore(aggregated_data['roas_d3'] / aggregated_data['roas_d0'])
+        aggregated_data['z_IPM'] = calculate_zscore(aggregated_data['IPM'])
 
         # Calculate Lumina Score
         aggregated_data['Lumina_Score'] = aggregated_data.apply(
@@ -151,4 +154,3 @@ if new_file and game_code:
         overall_output = aggregated_data.to_csv(index=False)
         
         st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
-
