@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from scipy.stats import zscore
 
 # Function to load previous tested creatives
 def load_tested_creatives(uploaded_file):
@@ -31,10 +30,6 @@ def categorize_creative(row, average_ipm, average_cost, impressions_threshold, c
     else:
         return 'Testing'
 
-# Sigmoid function
-def sigmoid(x):
-    return 100 / (1 + np.exp(-x))
-
 # Streamlit app
 st.title("Creative Performance Analyzer")
 
@@ -46,10 +41,6 @@ new_file = st.sidebar.file_uploader("Upload New Report CSV", type="csv")
 # Game code input
 st.sidebar.header("Game Code")
 game_code = st.sidebar.text_input("Enter the 3-letter game code (e.g., CRC)")
-
-# Target ROAS D0 input
-st.sidebar.header("Target ROAS D0")
-target_roas_d0 = st.sidebar.number_input("Enter the Target ROAS D0", min_value=0.0, value=0.5, step=0.1)
 
 # Threshold settings
 st.sidebar.header("Threshold Settings")
@@ -115,33 +106,11 @@ if new_file and game_code:
         upper_bound = Q3 + 1.5 * IQR
         aggregated_data = aggregated_data[(aggregated_data['IPM'] >= lower_bound) & (aggregated_data['IPM'] <= upper_bound)]
         
-        # Calculate averages and standard deviation for metrics
-        metrics = ['cost', 'roas_d0', 'roas_d3', 'IPM']
-        averages = aggregated_data[metrics].mean()
-        std_devs = aggregated_data[metrics].std()
-        max_values = aggregated_data[metrics].max()
-        min_values = aggregated_data[metrics].min()
-        
-        # Calculate ROAS diff
-        aggregated_data['ROAS_diff'] = aggregated_data['roas_d0'] - target_roas_d0
-
-        # Calculate z-scores for necessary columns
-        aggregated_data['z_cost'] = zscore(aggregated_data['cost'])
-        aggregated_data['z_ROAS_diff'] = zscore(aggregated_data['ROAS_diff'])
-        aggregated_data['z_ROAS_Mat_D3'] = zscore(aggregated_data['roas_d3'] / aggregated_data['roas_d0'])
-        aggregated_data['z_IPM'] = zscore(aggregated_data['IPM'])
-
-        # Calculate Lumina Score
-        aggregated_data['Lumina_Score'] = aggregated_data.apply(
-            lambda row: np.log(row['z_cost'] * row['z_ROAS_diff'] * row['z_ROAS_Mat_D3'] * row['z_IPM'] + 1), axis=1
-        )
-
-        # Apply sigmoid function to scale between 0 and 100
-        aggregated_data['Lumina_Score'] = aggregated_data['Lumina_Score'].apply(sigmoid)
-        
-        # Categorize creatives
+        # Calculate averages
         average_ipm = aggregated_data['IPM'].mean()
         average_cost = aggregated_data['cost'].mean()
+        
+        # Categorize creatives
         aggregated_data['Category'] = aggregated_data.apply(lambda row: categorize_creative(row, average_ipm, average_cost, impressions_threshold, cost_threshold, ipm_threshold), axis=1)
         
         # Add ROAS Mat. D3 column
