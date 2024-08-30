@@ -64,28 +64,26 @@ ipm_threshold = st.sidebar.slider("IPM Threshold Multiplier", min_value=0.0, max
 first_time_run = st.sidebar.checkbox("First-time run (No Previous Tested Creatives CSV)")
 
 if new_file and game_code:
-    # Load previous data if not first-time run
+    # Step 1: Load previous and new data
     prev_data = load_tested_creatives(prev_file) if not first_time_run else pd.DataFrame(columns=['creative_id', 'Facebook', 'Google Ads', 'Google Organic Search', 'Organic', 'Snapchat', 'TikTok for Business', 'Untrusted Devices'])
-
-    # Load and process new data
     new_data = pd.read_csv(new_file)
     
     if 'creative_network' not in new_data.columns:
         st.error("The uploaded new report CSV does not contain a 'creative_network' column.")
     else:
-        # Exclude specified creative IDs and those starting with "TTCC"
+        # Step 2: Filter out irrelevant creatives
         exclude_creative_ids = [
             'Search SearchPartners', 'Search GoogleSearch', 'Youtube YouTubeVideos',
-            'Display', 'TTCC_0021_Ship Craft - Gaming App'
+            'Display', 'TTCC'
         ]
         new_data = new_data[~new_data['creative_network'].isin(exclude_creative_ids)]
         new_data = new_data[~new_data['creative_network'].str.startswith('TTCC')]
 
-        # Extract creative IDs using the game code, concept number, and version number
+        # Step 3: Extract creative IDs
         new_data['creative_id'] = new_data.apply(lambda row: extract_creative_id(row['creative_network'], game_code), axis=1)
         new_data = new_data[new_data['creative_id'] != 'unknown']
         
-        # Aggregate data at the creative level
+        # Step 4: Aggregate data at the creative level
         aggregated_data = new_data.groupby('creative_id').agg({
             'impressions': 'sum',
             'cost': 'sum',
@@ -102,15 +100,12 @@ if new_file and game_code:
             'ecpi': 'mean'
         }).reset_index()
 
-        # Round aggregated metrics to 2 decimal places
-        for column in ['roas_d0', 'roas_d3', 'roas_d7', 'retention_rate_d1', 'retention_rate_d3', 'retention_rate_d7', 'lifetime_value_d0', 'lifetime_value_d3', 'lifetime_value_d7', 'ecpi']:
-            aggregated_data[column] = aggregated_data[column].round(2)
-        
+        # Step 5: Calculate additional metrics
         aggregated_data['IPM'] = (aggregated_data['installs'] / aggregated_data['impressions']) * 1000
         aggregated_data['IPM'].replace([float('inf'), -float('inf')], 0, inplace=True)
         aggregated_data['IPM'] = aggregated_data['IPM'].round(2)
         
-        # Exclude extreme outliers in IPM
+        # Step 6: Exclude outliers in IPM
         Q1 = aggregated_data['IPM'].quantile(0.25)
         Q3 = aggregated_data['IPM'].quantile(0.75)
         IQR = Q3 - Q1
@@ -118,38 +113,33 @@ if new_file and game_code:
         upper_bound = Q3 + 1.5 * IQR
         aggregated_data = aggregated_data[(aggregated_data['IPM'] >= lower_bound) & (aggregated_data['IPM'] <= upper_bound)]
         
-        # Calculate averages and standard deviation for metrics
-        metrics = ['cost', 'roas_d0', 'roas_d3', 'IPM']
-        averages = aggregated_data[metrics].mean()
-        std_devs = aggregated_data[metrics].std()
-        max_values = aggregated_data[metrics].max()
-        min_values = aggregated_data[metrics].min()
-        
-        # Calculate ROAS diff
+        # Step 7: Calculate ROAS diff
         aggregated_data['ROAS_diff'] = aggregated_data['roas_d0'] - target_roas_d0
 
-        # Calculate z-scores for necessary columns
+        # Step 8: Calculate ROAS Mat. D3 earlier in the process
+        aggregated_data['ROAS Mat. D3'] = (aggregated_data['roas_d3'] / aggregated_data['roas_d0']).replace([float('inf'), -float('inf'), np.nan], 0).round(2)
+        
+        # Step 9: Calculate z-scores for necessary columns
         aggregated_data['z_cost'] = calculate_zscore(aggregated_data['cost'])
         aggregated_data['z_ROAS_diff'] = calculate_zscore(aggregated_data['ROAS_diff'])
-        aggregated_data['z_ROAS_Mat_D3'] = calculate_zscore(aggregated_data['roas_d3'] / aggregated_data['roas_d0'])
+        aggregated_data['z_ROAS_Mat_D3'] = calculate_zscore(aggregated_data['ROAS Mat. D3'])
         aggregated_data['z_IPM'] = calculate_zscore(aggregated_data['IPM'])
 
-        # Calculate Lumina Score
+        # Step 10: Calculate Lumina Score
         aggregated_data['Lumina_Score'] = aggregated_data.apply(
             lambda row: np.log(row['z_cost'] * row['z_ROAS_diff'] * row['z_ROAS_Mat_D3'] * row['z_IPM'] + 1), axis=1
         )
-
-        # Apply sigmoid function to scale between 0 and 100
         aggregated_data['Lumina_Score'] = aggregated_data['Lumina_Score'].apply(sigmoid)
         
-        # Categorize creatives
+        # Step 11: Categorize creatives
         average_ipm = aggregated_data['IPM'].mean()
         average_cost = aggregated_data['cost'].mean()
         aggregated_data['Category'] = aggregated_data.apply(lambda row: categorize_creative(row, average_ipm, average_cost, impressions_threshold, cost_threshold, ipm_threshold), axis=1)
         
-        # Add ROAS Mat. D3 column
-        aggregated_data['ROAS Mat. D3'] = (aggregated_data['roas_d3'] / aggregated_data['roas_d0']).replace([float('inf'), -float('inf'), np.nan], 0).round(2)
-        
+        # Step 12: Output the overall creative performance data as CSV
+        overall_output = aggregated_data.to_csv(index=False)
+        st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
+
         # Output the overall creative performance data as CSV
         overall_output = aggregated_data.to_csv(index=False)
         
