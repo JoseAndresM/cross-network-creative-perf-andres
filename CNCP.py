@@ -74,7 +74,7 @@ if new_file and game_code:
         # Step 2: Filter out irrelevant creatives
         exclude_creative_ids = [
             'Search SearchPartners', 'Search GoogleSearch', 'Youtube YouTubeVideos',
-            'Display', 'TTCC'
+            'Display', 'TTCC_0021_Ship Craft - Gaming App'
         ]
         new_data = new_data[~new_data['creative_network'].isin(exclude_creative_ids)]
         new_data = new_data[~new_data['creative_network'].str.startswith('TTCC')]
@@ -119,10 +119,15 @@ if new_file and game_code:
         # Step 8: Calculate ROAS Mat. D3 earlier in the process
         aggregated_data['ROAS Mat. D3'] = (aggregated_data['roas_d3'] / aggregated_data['roas_d0']).replace([float('inf'), -float('inf'), np.nan], 0).round(2)
         
-        # Step 9: Calculate z-scores for necessary columns
+        # Step 9: Handle NaN values and check for zero variance before calculating z-scores
+        if aggregated_data['ROAS Mat. D3'].var() == 0:
+            aggregated_data['z_ROAS_Mat_D3'] = 0
+        else:
+            aggregated_data['ROAS Mat. D3'].fillna(aggregated_data['ROAS Mat. D3'].mean(), inplace=True)
+            aggregated_data['z_ROAS_Mat_D3'] = calculate_zscore(aggregated_data['ROAS Mat. D3'])
+
         aggregated_data['z_cost'] = calculate_zscore(aggregated_data['cost'])
         aggregated_data['z_ROAS_diff'] = calculate_zscore(aggregated_data['ROAS_diff'])
-        aggregated_data['z_ROAS_Mat_D3'] = calculate_zscore(aggregated_data['ROAS Mat. D3'])
         aggregated_data['z_IPM'] = calculate_zscore(aggregated_data['IPM'])
 
         # Step 10: Calculate Lumina Score
@@ -140,7 +145,3 @@ if new_file and game_code:
         overall_output = aggregated_data.to_csv(index=False)
         st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
 
-        # Output the overall creative performance data as CSV
-        overall_output = aggregated_data.to_csv(index=False)
-        
-        st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
