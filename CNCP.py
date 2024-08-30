@@ -130,11 +130,10 @@ if new_file and game_code:
         aggregated_data['z_ROAS_diff'] = calculate_zscore(aggregated_data['ROAS_diff'])
         aggregated_data['z_IPM'] = calculate_zscore(aggregated_data['IPM'])
 
-        # Step 10: Calculate Lumina Score
+        # Step 10: Calculate Lumina Score using the sigmoid of the logarithm of the product of the exponentials of the z-scores
         aggregated_data['Lumina_Score'] = aggregated_data.apply(
-            lambda row: np.log(row['z_cost'] * row['z_ROAS_diff'] * row['z_ROAS_Mat_D3'] * row['z_IPM'] + 1), axis=1
+            lambda row: sigmoid(np.log(np.exp(row['z_cost']) * np.exp(row['z_ROAS_diff']) * np.exp(row['z_ROAS_Mat_D3']) * np.exp(row['z_IPM']))), axis=1
         )
-        aggregated_data['Lumina_Score'] = aggregated_data['Lumina_Score'].apply(sigmoid)
         
         # Step 11: Categorize creatives
         average_ipm = aggregated_data['IPM'].mean()
