@@ -38,7 +38,6 @@ def calculate_zscore(series):
 def sigmoid(x):
     return 100 / (1 + np.exp(-x))
 
-
 # Streamlit app
 st.title("Creative Performance Analyzer")
 
@@ -55,13 +54,6 @@ game_code = st.sidebar.text_input("Enter the 3-letter game code (e.g., CRC)")
 st.sidebar.header("Target ROAS D0")
 target_roas_d0 = st.sidebar.number_input("Enter the Target ROAS D0", min_value=0.0, value=0.5, step=0.1)
 
-# Target CPI input
-st.sidebar.header("Target CPI")
-target_cpi = st.sidebar.number_input("Enter the Target CPI", min_value=0.0, value=2.0, step=0.1)
-
-# Auto-Test Analysis Toggle
-auto_test_analysis = st.sidebar.checkbox("Auto-Test Analysis")
-
 # Threshold settings
 st.sidebar.header("Threshold Settings")
 impressions_threshold = st.sidebar.number_input("Impressions Threshold", min_value=1000, value=2000, step=100)
@@ -70,7 +62,6 @@ ipm_threshold = st.sidebar.slider("IPM Threshold Multiplier", min_value=0.0, max
 
 # First-time run toggle
 first_time_run = st.sidebar.checkbox("First-time run (No Previous Tested Creatives CSV)")
-
 
 if new_file and game_code:
     # Step 1: Load previous and new data
@@ -92,24 +83,16 @@ if new_file and game_code:
         new_data['creative_id'] = new_data.apply(lambda row: extract_creative_id(row['creative_network'], game_code), axis=1)
         new_data = new_data[new_data['creative_id'] != 'unknown']
 
-        # Step 4: Adjust column names based on auto-test toggle
-        if auto_test_analysis:
-            new_data.rename(columns={
-                'ecpi_all': 'CPI',
-                'network_impressions': 'impressions',
-                'installs': 'installs'
-            }, inplace=True)
-
-        # Step 5: Ensure required columns exist before aggregation
+        # Step 4: Ensure required columns exist before aggregation
         required_columns = ['impressions', 'cost', 'installs', 'roas_d0', 'roas_d3', 'roas_d7', 'retention_rate_d1',
                             'retention_rate_d3', 'retention_rate_d7', 'lifetime_value_d0', 'lifetime_value_d3', 
-                            'lifetime_value_d7', 'ecpi', 'CPI']
+                            'lifetime_value_d7', 'ecpi']
         missing_columns = [col for col in required_columns if col not in new_data.columns]
         
         if missing_columns:
             st.error(f"The uploaded CSV is missing the following columns: {', '.join(missing_columns)}")
         else:
-            # Step 6: Aggregate data at the creative level
+            # Step 5: Aggregate data at the creative level
             aggregated_data = new_data.groupby('creative_id').agg({
                 'impressions': 'sum',
                 'cost': 'sum',
@@ -123,16 +106,15 @@ if new_file and game_code:
                 'lifetime_value_d0': 'mean',
                 'lifetime_value_d3': 'mean',
                 'lifetime_value_d7': 'mean',
-                'ecpi': 'mean',
-                'CPI': 'mean'
+                'ecpi': 'mean'
             }).reset_index()
 
-
-            # Step 7: Calculate additional metrics
+            # Step 6: Calculate additional metrics
             aggregated_data['IPM'] = (aggregated_data['installs'] / aggregated_data['impressions']) * 1000
             aggregated_data['IPM'].replace([float('inf'), -float('inf')], 0, inplace=True)
             aggregated_data['IPM'] = aggregated_data['IPM'].round(2)
-            # Step 8: Exclude outliers in IPM
+            
+            # Step 7: Exclude outliers in IPM
             Q1 = aggregated_data['IPM'].quantile(0.25)
             Q3 = aggregated_data['IPM'].quantile(0.75)
             IQR = Q3 - Q1
@@ -140,14 +122,13 @@ if new_file and game_code:
             upper_bound = Q3 + 1.5 * IQR
             aggregated_data = aggregated_data[(aggregated_data['IPM'] >= lower_bound) & (aggregated_data['IPM'] <= upper_bound)]
             
-            # Step 9: Calculate ROAS diff and CPI diff
+            # Step 8: Calculate ROAS diff
             aggregated_data['ROAS_diff'] = aggregated_data['roas_d0'] - target_roas_d0
-            aggregated_data['CPI_diff'] = target_cpi - aggregated_data['CPI']
 
-            # Step 10: Calculate ROAS Mat. D3 earlier in the process
+            # Step 9: Calculate ROAS Mat. D3 earlier in the process
             aggregated_data['ROAS Mat. D3'] = (aggregated_data['roas_d3'] / aggregated_data['roas_d0']).replace([float('inf'), -float('inf'), np.nan], 0).round(2)
             
-            # Step 11: Handle NaN values and check for zero variance before calculating z-scores
+            # Step 10: Handle NaN values and check for zero variance before calculating z-scores
             if aggregated_data['ROAS Mat. D3'].var() == 0:
                 aggregated_data['z_ROAS_Mat_D3'] = 0
             else:
@@ -156,27 +137,18 @@ if new_file and game_code:
 
             aggregated_data['z_cost'] = calculate_zscore(aggregated_data['cost'])
             aggregated_data['z_ROAS_diff'] = calculate_zscore(aggregated_data['ROAS_diff'])
-            aggregated_data['z_CPI_diff'] = calculate_zscore(aggregated_data['CPI_diff'])
             aggregated_data['z_IPM'] = calculate_zscore(aggregated_data['IPM'])
 
-            # Step 12: Calculate Lumina Score with Auto-Test Analysis logic
-            if auto_test_analysis:
-                # Apply logic only for creatives with installs >= 5
-                valid_creatives = aggregated_data[aggregated_data['installs'] >= 5]
-                valid_creatives['Lumina_Score'] = valid_creatives.apply(
-                    lambda row: sigmoid(np.log(np.exp(row['z_cost']) * np.exp(row['z_ROAS_diff']) * np.exp(row['z_ROAS_Mat_D3']) * np.exp(row['z_IPM']) * np.exp(row['z_CPI_diff']))), axis=1
-                )
-                aggregated_data = valid_creatives  # Replace aggregated_data with filtered data
-            else:
-                aggregated_data['Lumina_Score'] = aggregated_data.apply(
-                    lambda row: sigmoid(np.log(np.exp(row['z_cost']) * np.exp(row['z_ROAS_diff']) * np.exp(row['z_ROAS_Mat_D3']) * np.exp(row['z_IPM']))), axis=1
-                )
+            # Step 11: Calculate Lumina Score
+            aggregated_data['Lumina_Score'] = aggregated_data.apply(
+                lambda row: sigmoid(np.log(np.exp(row['z_cost']) * np.exp(row['z_ROAS_diff']) * np.exp(row['z_ROAS_Mat_D3']) * np.exp(row['z_IPM']))), axis=1
+            )
             
-            # Step 13: Categorize creatives
+            # Step 12: Categorize creatives
             average_ipm = aggregated_data['IPM'].mean()
             average_cost = aggregated_data['cost'].mean()
             aggregated_data['Category'] = aggregated_data.apply(lambda row: categorize_creative(row, average_ipm, average_cost, impressions_threshold, cost_threshold, ipm_threshold), axis=1)
             
-            # Step 14: Output the overall creative performance data as CSV
+            # Step 13: Output the overall creative performance data as CSV
             overall_output = aggregated_data.to_csv(index=False)
             st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
