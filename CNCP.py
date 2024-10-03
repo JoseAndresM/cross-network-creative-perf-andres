@@ -68,7 +68,7 @@ st.sidebar.header("Weights Settings")
 st.sidebar.write("Adjust the weights for each metric used in the Lumina Score calculation.")
 
 # Input fields for weights
-weight_cost = st.sidebar.number_input("Weight for Cost (negative value reduces score for higher cost)", min_value=-5.0, max_value=0.0, value=-0.5, step=0.1)
+weight_cost = st.sidebar.number_input("Weight for Cost (negative value reduces score for higher cost)", min_value=-1.0, max_value=2.0, value=1.0, step=0.1)
 weight_roas_diff = st.sidebar.number_input("Weight for ROAS Difference", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
 weight_roas_mat_d3 = st.sidebar.number_input("Weight for ROAS Maturation D3", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
 weight_ipm = st.sidebar.number_input("Weight for IPM", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
