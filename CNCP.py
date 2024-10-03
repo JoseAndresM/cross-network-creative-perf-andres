@@ -97,7 +97,7 @@ if new_file and game_code:
         new_data = new_data[new_data['creative_id'] != 'unknown']
 
         # Step 4: Ensure required columns exist before aggregation
-        required_columns = ['impressions', 'cost', 'installs', 'roas_d0', 'roas_d3', 'roas_d7', 'retention_rate_d1',
+        required_columns = ['network_impressions', 'cost', 'installs', 'roas_d0', 'roas_d3', 'roas_d7', 'retention_rate_d1',
                             'retention_rate_d3', 'retention_rate_d7', 'lifetime_value_d0', 'lifetime_value_d3', 
                             'lifetime_value_d7']
         missing_columns = [col for col in required_columns if col not in new_data.columns]
@@ -107,7 +107,7 @@ if new_file and game_code:
         else:
             # Step 5: Aggregate data at the creative level
             aggregated_data = new_data.groupby('creative_id').agg({
-                'impressions': 'sum',
+                'network_impressions': 'sum',
                 'cost': 'sum',
                 'installs': 'sum',
                 'roas_d0': 'mean',
@@ -122,7 +122,7 @@ if new_file and game_code:
             }).reset_index()
 
             # Step 6: Calculate additional metrics
-            aggregated_data['IPM'] = (aggregated_data['installs'] / aggregated_data['impressions']) * 1000
+            aggregated_data['IPM'] = (aggregated_data['installs'] / aggregated_data['network_impressions']) * 1000
             aggregated_data['IPM'].replace([float('inf'), -float('inf')], 0, inplace=True)
             aggregated_data['IPM'] = aggregated_data['IPM'].round(2)
             
@@ -174,7 +174,7 @@ if new_file and game_code:
             # Step 15: Categorize creatives
             average_ipm = aggregated_data['IPM'].mean()
             average_cost = aggregated_data['cost'].mean()
-            aggregated_data['Category'] = aggregated_data.apply(lambda row: categorize_creative(row, average_ipm, average_cost, impressions_threshold, cost_threshold, ipm_threshold), axis=1)
+            aggregated_data['Category'] = aggregated_data.apply(lambda row: categorize_creative(row, average_ipm, average_cost, network_impressions_threshold, cost_threshold, ipm_threshold), axis=1)
             
             # Step 16: Output the overall creative performance data as CSV
             overall_output = aggregated_data.to_csv(index=False)
