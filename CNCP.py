@@ -171,17 +171,20 @@ if new_file and game_code:
             
             # Step 12: Handle NaN values and check for zero variance before calculating z-scores
             for col in ['ROAS Mat. D3', 'cost', 'ROAS_diff', 'IPM']:
+                # Replace spaces and periods in the column name for the z-score column
+                z_col_name = f'z_{col.replace(" ", "_").replace(".", "")}'
                 if aggregated_data[col].var(ddof=0) == 0:
-                    aggregated_data[f'z_{col.replace(" ", "_")}'] = 0
+                    aggregated_data[z_col_name] = 0
                 else:
                     aggregated_data[col].fillna(aggregated_data[col].mean(), inplace=True)
-                    aggregated_data[f'z_{col.replace(" ", "_")}'] = calculate_zscore(aggregated_data[col])
-
+                    aggregated_data[z_col_name] = calculate_zscore(aggregated_data[col])
+            
             # Step 13: Scale z-scores using min-max scaling
             aggregated_data['scaled_cost'] = min_max_scale(aggregated_data['z_cost'])
             aggregated_data['scaled_ROAS_diff'] = min_max_scale(aggregated_data['z_ROAS_diff'])
-            aggregated_data['scaled_ROAS_Mat_D3'] = min_max_scale(aggregated_data['z_ROAS_Mat_D3'])
+            aggregated_data['scaled_ROAS_Mat_D3'] = min_max_scale(aggregated_data['z_ROAS_Mat_D3'])  # This should now be correct
             aggregated_data['scaled_IPM'] = min_max_scale(aggregated_data['z_IPM'])
+
 
             # Step 14: Use fixed weight for cost and weights input by the user for other metrics
             weights = {
