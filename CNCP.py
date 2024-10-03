@@ -34,9 +34,6 @@ def categorize_creative(row, average_ipm, average_cost, impressions_threshold, c
 def calculate_zscore(series):
     return (series - series.mean()) / series.std(ddof=0)
 
-def min_max_scale(series, epsilon=1e-8):
-    return (series - series.min()) / (series.max() - series.min() + epsilon)
-
 # Sigmoid function
 def sigmoid(x):
     return 100 / (1 + np.exp(-x))
@@ -67,12 +64,12 @@ ipm_threshold = st.sidebar.slider("IPM Threshold Multiplier", min_value=0.0, max
 st.sidebar.header("Weights Settings")
 st.sidebar.write("Adjust the weights for each metric used in the Lumina Score calculation.")
 
-# Spend weight is fixed at -1 (negative to penalize higher spend)
+# Spend weight is fixed at +1 (positive to promote scalability)
 
 # Input fields for other weights
-weight_roas_diff = st.sidebar.number_input("Weight for ROAS Difference", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
-weight_roas_mat_d3 = st.sidebar.number_input("Weight for ROAS Maturation D3", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
-weight_ipm = st.sidebar.number_input("Weight for IPM", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
+weight_roas_diff = st.sidebar.number_input("Weight for ROAS Difference", min_value=0.0, max_value=2.0, value=1.0, step=0.1)
+weight_roas_mat_d3 = st.sidebar.number_input("Weight for ROAS Maturation D3", min_value=0.0, max_value=2.0, value=1.0, step=0.1)
+weight_ipm = st.sidebar.number_input("Weight for IPM", min_value=0.0, max_value=2.0, value=1.0, step=0.1)
 
 # First-time run toggle
 first_time_run = st.sidebar.checkbox("First-time run (No Previous Tested Creatives CSV)")
@@ -166,48 +163,50 @@ if new_file and game_code:
             # Step 10: Calculate ROAS diff
             aggregated_data['ROAS_diff'] = aggregated_data['ROAS_d0'] - target_roas_d0
 
-            # Step 11: Calculate ROAS Mat. D3
-            aggregated_data['ROAS Mat. D3'] = (aggregated_data['ROAS_d3'] / aggregated_data['ROAS_d0']).replace([float('inf'), -float('inf'), np.nan], 0).round(2)
-            
+            # Step 11: Calculate ROAS Mat D3
+            aggregated_data['ROAS_Mat_D3'] = np.where(
+                aggregated_data['ROAS_d0'] != 0,
+                aggregated_data['ROAS_d3'] / aggregated_data['ROAS_d0'],
+                0
+            )
+            aggregated_data['ROAS_Mat_D3'].replace([float('inf'), -float('inf'), np.nan], 0, inplace=True)
+            aggregated_data['ROAS_Mat_D3'] = aggregated_data['ROAS_Mat_D3'].round(2)
+
             # Step 12: Handle NaN values and check for zero variance before calculating z-scores
-            for col in ['ROAS Mat. D3', 'cost', 'ROAS_diff', 'IPM']:
-                # Replace spaces and periods in the column name for the z-score column
-                z_col_name = f'z_{col.replace(" ", "_").replace(".", "")}'
+            for col in ['ROAS_Mat_D3', 'cost', 'ROAS_diff', 'IPM']:
+                # Replace spaces and dots in column names
+                col_name = col.replace(" ", "_").replace(".", "")
                 if aggregated_data[col].var(ddof=0) == 0:
-                    aggregated_data[z_col_name] = 0
+                    aggregated_data[f'z_{col_name}'] = 0
                 else:
                     aggregated_data[col].fillna(aggregated_data[col].mean(), inplace=True)
-                    aggregated_data[z_col_name] = calculate_zscore(aggregated_data[col])
-            
-            # Step 13: Scale z-scores using min-max scaling
-            aggregated_data['scaled_cost'] = min_max_scale(aggregated_data['z_cost'])
-            aggregated_data['scaled_ROAS_diff'] = min_max_scale(aggregated_data['z_ROAS_diff'])
-            aggregated_data['scaled_ROAS_Mat_D3'] = min_max_scale(aggregated_data['z_ROAS_Mat_D3'])  # This should now be correct
-            aggregated_data['scaled_IPM'] = min_max_scale(aggregated_data['z_IPM'])
+                    aggregated_data[f'z_{col_name}'] = calculate_zscore(aggregated_data[col])
 
-
-            # Step 14: Use fixed weight for cost and weights input by the user for other metrics
+            # Step 13: Use weights on z-scores
             weights = {
-                'scaled_cost': -1.0,  # Fixed weight to penalize higher spend
-                'scaled_ROAS_diff': weight_roas_diff,
-                'scaled_ROAS_Mat_D3': weight_roas_mat_d3,
-                'scaled_IPM': weight_ipm
+                'z_cost': 1.0,  # Fixed weight to promote scalability
+                'z_ROAS_diff': weight_roas_diff,
+                'z_ROAS_Mat_D3': weight_roas_mat_d3,
+                'z_IPM': weight_ipm
             }
 
-            # Step 15: Calculate weighted sum
-            aggregated_data['weighted_sum'] = (aggregated_data['scaled_cost'] * weights['scaled_cost'] + 
-                                               aggregated_data['scaled_ROAS_diff'] * weights['scaled_ROAS_diff'] + 
-                                               aggregated_data['scaled_ROAS_Mat_D3'] * weights['scaled_ROAS_Mat_D3'] + 
-                                               aggregated_data['scaled_IPM'] * weights['scaled_IPM'])
+            # Step 14: Calculate Lumina Score using weighted sum of z-scores
+            def calculate_lumina_score(row):
+                weighted_sum = (
+                    row['z_cost'] * weights['z_cost'] +
+                    row['z_ROAS_diff'] * weights['z_ROAS_diff'] +
+                    row['z_ROAS_Mat_D3'] * weights['z_ROAS_Mat_D3'] +
+                    row['z_IPM'] * weights['z_IPM']
+                )
+                return sigmoid(weighted_sum)
 
-            # Step 16: Calculate Lumina Score using sigmoid function
-            aggregated_data['Lumina_Score'] = sigmoid(aggregated_data['weighted_sum'])
+            aggregated_data['Lumina_Score'] = aggregated_data.apply(calculate_lumina_score, axis=1)
 
-            # Step 17: Categorize creatives
+            # Step 15: Categorize creatives
             average_ipm = aggregated_data['IPM'].mean()
             average_cost = aggregated_data['cost'].mean()
             aggregated_data['Category'] = aggregated_data.apply(lambda row: categorize_creative(row, average_ipm, average_cost, impressions_threshold, cost_threshold, ipm_threshold), axis=1)
             
-            # Step 18: Output the overall creative performance data as CSV
+            # Step 16: Output the overall creative performance data as CSV
             overall_output = aggregated_data.to_csv(index=False)
             st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
