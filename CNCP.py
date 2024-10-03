@@ -67,9 +67,9 @@ st.sidebar.write("Adjust the weights for each metric used in the Lumina Score ca
 # Spend weight is fixed at +1 (positive to promote scalability)
 
 # Input fields for other weights
-weight_roas_diff = st.sidebar.number_input("Weight for ROAS Difference", min_value=0.0, max_value=2.0, value=1.0, step=0.1)
-weight_roas_mat_d3 = st.sidebar.number_input("Weight for ROAS Maturation D3", min_value=0.0, max_value=2.0, value=1.0, step=0.1)
-weight_ipm = st.sidebar.number_input("Weight for IPM", min_value=0.0, max_value=2.0, value=1.0, step=0.1)
+weight_roas_diff = st.sidebar.number_input("Weight for ROAS Difference", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
+weight_roas_mat_d3 = st.sidebar.number_input("Weight for ROAS Maturation D3", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
+weight_ipm = st.sidebar.number_input("Weight for IPM", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
 
 # First-time run toggle
 first_time_run = st.sidebar.checkbox("First-time run (No Previous Tested Creatives CSV)")
@@ -96,7 +96,7 @@ if new_file and game_code:
 
         # Step 4: Ensure required columns exist before aggregation
         required_columns = [
-            'network_impressions', 'cost', 'installs', 'roas_d0', 'roas_d3', 'roas_d7',
+            'network_impressions', 'cost', 'installs',
             'retention_rate_d1', 'retention_rate_d3', 'retention_rate_d7',
             'custom_cohorted_total_revenue_d0', 'custom_cohorted_total_revenue_d3', 'custom_cohorted_total_revenue_d7'
         ]
@@ -110,9 +110,6 @@ if new_file and game_code:
                 'network_impressions': 'sum',
                 'cost': 'sum',
                 'installs': 'sum',
-                'roas_d0': 'mean',
-                'roas_d3': 'mean',
-                'roas_d7': 'mean',
                 'retention_rate_d1': 'mean',
                 'retention_rate_d3': 'mean',
                 'retention_rate_d7': 'mean',
@@ -160,10 +157,10 @@ if new_file and game_code:
             upper_bound = Q3 + 1.5 * IQR
             aggregated_data = aggregated_data[(aggregated_data['IPM'] >= lower_bound) & (aggregated_data['IPM'] <= upper_bound)]
             
-            # Step 10: Calculate ROAS diff
+            # Step 10: Calculate ROAS diff using calculated ROAS_d0
             aggregated_data['ROAS_diff'] = aggregated_data['ROAS_d0'] - target_roas_d0
 
-            # Step 11: Calculate ROAS Mat D3
+            # Step 11: Calculate ROAS Mat D3 using calculated ROAS_d3 and ROAS_d0
             aggregated_data['ROAS_Mat_D3'] = np.where(
                 aggregated_data['ROAS_d0'] != 0,
                 aggregated_data['ROAS_d3'] / aggregated_data['ROAS_d0'],
@@ -190,7 +187,7 @@ if new_file and game_code:
                 'z_IPM': weight_ipm
             }
 
-            # Step 14: Calculate Lumina Score using weighted sum of z-scores
+            # Step 14: Calculate Lumina Score using weighted sum of z-scores and apply 15% penalty for installs < 5
             def calculate_lumina_score(row):
                 weighted_sum = (
                     row['z_cost'] * weights['z_cost'] +
@@ -198,7 +195,10 @@ if new_file and game_code:
                     row['z_ROAS_Mat_D3'] * weights['z_ROAS_Mat_D3'] +
                     row['z_IPM'] * weights['z_IPM']
                 )
-                return sigmoid(weighted_sum)
+                lumina_score = sigmoid(weighted_sum)
+                if row['installs'] < 5:
+                    lumina_score *= 0.85  # Penalize by 15%
+                return lumina_score
 
             aggregated_data['Lumina_Score'] = aggregated_data.apply(calculate_lumina_score, axis=1)
 
