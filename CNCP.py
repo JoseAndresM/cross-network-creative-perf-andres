@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import re  # Import regular expressions module
 
 # Function to load previous tested creatives
 def load_tested_creatives(uploaded_file):
@@ -9,13 +10,14 @@ def load_tested_creatives(uploaded_file):
     else:
         return pd.DataFrame(columns=['creative_id', 'Facebook', 'Google Ads', 'Google Organic Search', 'Organic', 'Snapchat', 'TikTok for Business', 'Untrusted Devices'])
 
-# Function to extract the creative identifier (game code, concept number, or raw recording, and version number)
-def extract_creative_id(name, game_code):
-    parts = name.split('_')
-    for i in range(len(parts) - 2):
-        if parts[i] == game_code and (parts[i+1].startswith('C') or parts[i+1].startswith('R')) and parts[i+2].startswith('V'):
-            return '_'.join([game_code, parts[i+1], parts[i+2]])
-    return '_'.join(parts[:3])
+# Updated function to extract the creative identifier (e.g., C8_V45)
+def extract_creative_id(name):
+    # Search for patterns like 'C8_V45' or 'C123_V456'
+    match = re.search(r'C\d+_V\d+', name)
+    if match:
+        return match.group(0)
+    else:
+        return 'unknown'
 
 # Function to categorize creatives
 def categorize_creative(row, average_ipm, average_cost, average_roas_d0, impressions_threshold):
@@ -46,10 +48,6 @@ st.sidebar.header("Upload Files")
 prev_file = st.sidebar.file_uploader("Upload Previous Tested Creatives CSV", type="csv")
 new_file = st.sidebar.file_uploader("Upload New Report CSV", type="csv")
 
-# Game code input
-st.sidebar.header("Game Code")
-game_code = st.sidebar.text_input("Enter the 3-letter game code (e.g., CRC)")
-
 # Target ROAS D0 input
 st.sidebar.header("Target ROAS D0")
 target_roas_d0 = st.sidebar.number_input("Enter the Target ROAS D0", min_value=0.0, value=0.5, step=0.1)
@@ -72,7 +70,7 @@ weight_ipm = st.sidebar.number_input("Weight for IPM", min_value=0.0, max_value=
 # First-time run toggle
 first_time_run = st.sidebar.checkbox("First-time run (No Previous Tested Creatives CSV)")
 
-if new_file and game_code:
+if new_file:
     # Step 1: Load previous and new data
     prev_data = load_tested_creatives(prev_file) if not first_time_run else pd.DataFrame(columns=['creative_id', 'Facebook', 'Google Ads', 'Google Organic Search', 'Organic', 'Snapchat', 'TikTok for Business', 'Untrusted Devices'])
     new_data = pd.read_csv(new_file)
@@ -88,8 +86,8 @@ if new_file and game_code:
         new_data = new_data[~new_data['creative_network'].isin(exclude_creative_ids)]
         new_data = new_data[~new_data['creative_network'].str.startswith('TTCC')]
 
-        # Step 3: Extract creative IDs
-        new_data['creative_id'] = new_data.apply(lambda row: extract_creative_id(row['creative_network'], game_code), axis=1)
+        # Step 3: Extract creative IDs using the updated function
+        new_data['creative_id'] = new_data['creative_network'].apply(extract_creative_id)
         new_data = new_data[new_data['creative_id'] != 'unknown']
 
         # Step 4: Ensure required columns exist before aggregation
