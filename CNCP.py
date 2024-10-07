@@ -12,12 +12,15 @@ def load_tested_creatives(uploaded_file):
 
 # Updated function to extract the creative identifier (e.g., C8_V45)
 def extract_creative_id(name):
-    # Search for patterns like 'C8_V45' or 'C123_V456'
-    match = re.search(r'C\d+_V\d+', name)
-    if match:
-        return match.group(0)
-    else:
-        return 'unknown'
+    # Split the name into parts
+    parts = name.split('_')
+    # Iterate through the parts to find the first 'C<number>_V<number>' pattern
+    for i in range(len(parts) - 1):
+        # Check if the current and next parts match the pattern
+        if re.match(r'^C\d+$', parts[i]) and re.match(r'^V\d+$', parts[i+1]):
+            return f"{parts[i]}_{parts[i+1]}"
+    # If no match is found, return 'unknown'
+    return 'unknown'
 
 # Function to categorize creatives
 def categorize_creative(row, average_ipm, average_cost, average_roas_d0, impressions_threshold):
