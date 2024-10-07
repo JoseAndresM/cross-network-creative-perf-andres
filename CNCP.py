@@ -23,12 +23,12 @@ def categorize_creative(row, average_ipm, average_cost, average_roas_d0, impress
         return 'Testing'
     elif row['cost'] > average_cost and row['ROAS_d0'] > average_roas_d0 and row['IPM'] > average_ipm:
         return 'High Performance'
-    elif row['cost'] <= average_cost and row['ROAS_d0'] > average_roas_d0 and row['IPM'] > average_ipm:
+    elif row['ROAS_d0'] > average_roas_d0 and row['IPM'] > average_ipm:
         return 'Potential Creative'
-    elif abs(row['cost'] - average_cost) / average_cost <= 0.1 and row['ROAS_d0'] > average_roas_d0 and row['IPM'] < average_ipm:
-        return 'Placement Check'
-    else:
+    elif row['cost'] < average_cost and row['ROAS_d0'] < average_roas_d0 and row['IPM'] < average_ipm:
         return 'Low Performance'
+    else:
+        return 'Average Performance'
 
 # Function to calculate z-scores manually
 def calculate_zscore(series):
@@ -215,4 +215,3 @@ if new_file and game_code:
             # Step 17: Output the overall creative performance data as CSV
             overall_output = aggregated_data.to_csv(index=False)
             st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
-
