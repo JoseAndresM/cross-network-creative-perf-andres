@@ -10,17 +10,24 @@ def load_tested_creatives(uploaded_file):
     else:
         return pd.DataFrame(columns=['creative_id', 'Facebook', 'Google Ads', 'Google Organic Search', 'Organic', 'Snapchat', 'TikTok for Business', 'Untrusted Devices'])
 
-# Updated function to extract the creative identifier (e.g., C8_V45)
-def extract_creative_id(name):
-    # Split the name into parts
+# Updated function to extract the creative identifier based on the game code
+def extract_creative_id(name, game_code):
     parts = name.split('_')
-    # Iterate through the parts to find the first 'C<number>_V<number>' pattern
-    for i in range(len(parts) - 1):
-        # Check if the current and next parts match the pattern
-        if re.match(r'^C\d+$', parts[i]) and re.match(r'^V\d+$', parts[i+1]):
-            return f"{parts[i]}_{parts[i+1]}"
-    # If no match is found, return 'unknown'
-    return 'unknown'
+    try:
+        # Find the index of the game code in the parts
+        index = parts.index(game_code)
+        # Ensure there are enough parts after the game code
+        if index + 2 < len(parts):
+            part_c = parts[index + 1]
+            part_v = parts[index + 2]
+            # Check if the next parts match 'C<number>' and 'V<number>'
+            if re.match(r'^C\d+$', part_c) and re.match(r'^V\d+$', part_v):
+                return f"{game_code}_{part_c}_{part_v}"
+        # If the pattern doesn't match, return 'unknown'
+        return 'unknown'
+    except ValueError:
+        # Game code not found in parts
+        return 'unknown'
 
 # Function to categorize creatives
 def categorize_creative(row, average_ipm, average_cost, average_roas_d0, impressions_threshold):
@@ -51,6 +58,10 @@ st.sidebar.header("Upload Files")
 prev_file = st.sidebar.file_uploader("Upload Previous Tested Creatives CSV", type="csv")
 new_file = st.sidebar.file_uploader("Upload New Report CSV", type="csv")
 
+# Game code input
+st.sidebar.header("Game Code")
+game_code = st.sidebar.text_input("Enter the game code used in your creative names (e.g., DVS)")
+
 # Target ROAS D0 input
 st.sidebar.header("Target ROAS D0")
 target_roas_d0 = st.sidebar.number_input("Enter the Target ROAS D0", min_value=0.0, value=0.5, step=0.1)
@@ -73,7 +84,7 @@ weight_ipm = st.sidebar.number_input("Weight for IPM", min_value=0.0, max_value=
 # First-time run toggle
 first_time_run = st.sidebar.checkbox("First-time run (No Previous Tested Creatives CSV)")
 
-if new_file:
+if new_file and game_code:
     # Step 1: Load previous and new data
     prev_data = load_tested_creatives(prev_file) if not first_time_run else pd.DataFrame(columns=['creative_id', 'Facebook', 'Google Ads', 'Google Organic Search', 'Organic', 'Snapchat', 'TikTok for Business', 'Untrusted Devices'])
     new_data = pd.read_csv(new_file)
@@ -90,7 +101,7 @@ if new_file:
         new_data = new_data[~new_data['creative_network'].str.startswith('TTCC')]
 
         # Step 3: Extract creative IDs using the updated function
-        new_data['creative_id'] = new_data['creative_network'].apply(extract_creative_id)
+        new_data['creative_id'] = new_data.apply(lambda row: extract_creative_id(row['creative_network'], game_code), axis=1)
         new_data = new_data[new_data['creative_id'] != 'unknown']
 
         # Step 4: Ensure required columns exist before aggregation
