@@ -18,17 +18,17 @@ def extract_creative_id(name, game_code):
     return '_'.join(parts[:3])
 
 # Function to categorize creatives
-def categorize_creative(row, average_ipm, average_cost, impressions_threshold, cost_threshold, ipm_threshold):
+def categorize_creative(row, average_ipm, average_cost, average_roas_d0, impressions_threshold):
     if row['network_impressions'] < impressions_threshold:
         return 'Testing'
-    elif row['cost'] >= cost_threshold * average_cost and row['IPM'] > ipm_threshold * average_ipm:
+    elif row['cost'] > average_cost and row['ROAS_d0'] > average_roas_d0 and row['IPM'] > average_ipm:
         return 'High Performance'
-    elif row['IPM'] >= ipm_threshold * average_ipm:
+    elif row['cost'] <= average_cost and row['ROAS_d0'] > average_roas_d0 and row['IPM'] > average_ipm:
         return 'Potential Creative'
-    elif row['IPM'] < average_ipm:
-        return 'Low Performance'
+    elif abs(row['cost'] - average_cost) / average_cost <= 0.1 and row['ROAS_d0'] > average_roas_d0 and row['IPM'] < average_ipm:
+        return 'Placement Check'
     else:
-        return 'Testing'
+        return 'Low Performance'
 
 # Function to calculate z-scores manually
 def calculate_zscore(series):
@@ -57,8 +57,6 @@ target_roas_d0 = st.sidebar.number_input("Enter the Target ROAS D0", min_value=0
 # Threshold settings
 st.sidebar.header("Threshold Settings")
 impressions_threshold = st.sidebar.number_input("Impressions Threshold", min_value=1000, value=2000, step=100)
-cost_threshold = st.sidebar.slider("Cost Threshold Multiplier", min_value=0.0, max_value=5.0, value=1.1, step=0.1)
-ipm_threshold = st.sidebar.slider("IPM Threshold Multiplier", min_value=0.0, max_value=5.0, value=1.1, step=0.1)
 
 # Weights settings
 st.sidebar.header("Weights Settings")
@@ -101,7 +99,7 @@ if new_file and game_code:
             'custom_cohorted_total_revenue_d0', 'custom_cohorted_total_revenue_d3', 'custom_cohorted_total_revenue_d7'
         ]
         missing_columns = [col for col in required_columns if col not in new_data.columns]
-        
+
         if missing_columns:
             st.error(f"The uploaded CSV is missing the following columns: {', '.join(missing_columns)}")
         else:
@@ -202,11 +200,19 @@ if new_file and game_code:
 
             aggregated_data['Lumina_Score'] = aggregated_data.apply(calculate_lumina_score, axis=1)
 
-            # Step 15: Categorize creatives
+            # Step 15: Calculate averages
             average_ipm = aggregated_data['IPM'].mean()
             average_cost = aggregated_data['cost'].mean()
-            aggregated_data['Category'] = aggregated_data.apply(lambda row: categorize_creative(row, average_ipm, average_cost, impressions_threshold, cost_threshold, ipm_threshold), axis=1)
+            average_roas_d0 = aggregated_data['ROAS_d0'].mean()
+
+            # Step 16: Categorize creatives with updated function
+            aggregated_data['Category'] = aggregated_data.apply(
+                lambda row: categorize_creative(
+                    row, average_ipm, average_cost, average_roas_d0, impressions_threshold
+                ), axis=1
+            )
             
-            # Step 16: Output the overall creative performance data as CSV
+            # Step 17: Output the overall creative performance data as CSV
             overall_output = aggregated_data.to_csv(index=False)
             st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
+
