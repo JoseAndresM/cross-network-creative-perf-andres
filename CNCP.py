@@ -55,7 +55,6 @@ st.title("Creative Performance Analyzer")
 
 # File upload section
 st.sidebar.header("Upload Files")
-prev_file = st.sidebar.file_uploader("Upload Previous Tested Creatives CSV", type="csv")
 new_file = st.sidebar.file_uploader("Upload New Report CSV", type="csv")
 
 # Game code input
