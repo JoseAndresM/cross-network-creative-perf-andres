@@ -8,23 +8,28 @@ def load_tested_creatives(uploaded_file):
     if uploaded_file is not None:
         return pd.read_csv(uploaded_file)
     else:
-        return pd.DataFrame(columns=['creative_id', 'Facebook', 'Google Ads', 'Google Organic Search', 'Organic', 'Snapchat', 'TikTok for Business', 'Untrusted Devices'])
+        return pd.DataFrame(columns=['creative_id'])
 
 # Updated function to extract the creative identifier based on the game code
 def extract_creative_id(name, game_code):
+    # Remove any playables suffixes after '_EN_PAD' or similar markers
+    # First, split the name by '_EN_PAD' or '_EN_' or '_WW_' to remove trailing playables
+    name = re.split(r'_(EN|WW)_', name)[0]
     parts = name.split('_')
     try:
         # Find the index of the game code in the parts
         index = parts.index(game_code)
         # Ensure there are enough parts after the game code
         if index + 2 < len(parts):
-            part_c = parts[index + 1]
+            part_cr = parts[index + 1]
             part_v = parts[index + 2]
-            # Check if the next parts match 'C<number>' and 'V<number>'
-            if re.match(r'^C\d+$', part_c) and re.match(r'^V\d+$', part_v):
-                return f"{game_code}_{part_c}_{part_v}"
-        # If the pattern doesn't match, return 'unknown'
-        return 'unknown'
+            # Check if the next parts match 'C<number>' or 'R<number>' and 'V<number>'
+            if re.match(r'^[CR]\d+$', part_cr) and re.match(r'^V\d+$', part_v):
+                return f"{game_code}_{part_cr}_{part_v}"
+            else:
+                return 'unknown'
+        else:
+            return 'unknown'
     except ValueError:
         # Game code not found in parts
         return 'unknown'
@@ -51,7 +56,7 @@ def sigmoid(x):
     return 100 / (1 + np.exp(-x))
 
 # Streamlit app
-st.title("Lumina - Cross Network - Creative Performance Analyzer")
+st.title("Creative Performance Analyzer")
 
 # File upload section
 st.sidebar.header("Upload Files")
@@ -84,9 +89,13 @@ weight_ipm = st.sidebar.number_input("Weight for IPM", min_value=0.0, max_value=
 # First-time run toggle
 first_time_run = st.sidebar.checkbox("First-time run (No Previous Tested Creatives CSV)")
 
+# Input for recently tested creatives
+st.sidebar.header("Recently Tested Creatives")
+recent_creatives_input = st.sidebar.text_area("Enter recently tested creatives, one per line")
+
 if new_file and game_code:
     # Step 1: Load previous and new data
-    prev_data = load_tested_creatives(prev_file) if not first_time_run else pd.DataFrame(columns=['creative_id', 'Facebook', 'Google Ads', 'Google Organic Search', 'Organic', 'Snapchat', 'TikTok for Business', 'Untrusted Devices'])
+    prev_data = load_tested_creatives(prev_file) if not first_time_run else pd.DataFrame(columns=['creative_id'])
     new_data = pd.read_csv(new_file)
     
     if 'creative_network' not in new_data.columns:
@@ -97,6 +106,8 @@ if new_file and game_code:
             'Search SearchPartners', 'Search GoogleSearch', 'Youtube YouTubeVideos',
             'Display', 'TTCC_0021_Ship Craft - Gaming App'
         ]
+        # Exclude creatives that start with '3PRewardedPlayable' or '3PPlayable_'
+        new_data = new_data[~new_data['creative_network'].str.startswith(('3PRewardedPlayable', '3PPlayable_'))]
         new_data = new_data[~new_data['creative_network'].isin(exclude_creative_ids)]
         new_data = new_data[~new_data['creative_network'].str.startswith('TTCC')]
 
@@ -191,7 +202,7 @@ if new_file and game_code:
 
             # Step 13: Use weights on z-scores
             weights = {
-                'z_cost': 1.1,  # Fixed weight to promote scalability
+                'z_cost': 1.0,  # Fixed weight to promote scalability
                 'z_ROAS_diff': weight_roas_diff,
                 'z_ROAS_Mat_D3': weight_roas_mat_d3,
                 'z_IPM': weight_ipm
@@ -224,6 +235,33 @@ if new_file and game_code:
                 ), axis=1
             )
             
-            # Step 17: Output the overall creative performance data as CSV
+            # Step 17: Sort by Lumina Score
+            aggregated_data.sort_values(by='Lumina_Score', ascending=False, inplace=True)
+            aggregated_data.reset_index(drop=True, inplace=True)
+            aggregated_data.index += 1  # Start index from 1 for ranking
+
+            # Step 18: Output the overall creative performance data as CSV
             overall_output = aggregated_data.to_csv(index=False)
             st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
+
+            # Step 19: Handle recently tested creatives if provided
+            if recent_creatives_input.strip():
+                recent_creatives = [line.strip() for line in recent_creatives_input.strip().split('\n') if line.strip()]
+                recent_data = aggregated_data[aggregated_data['creative_id'].isin(recent_creatives)]
+                if not recent_data.empty:
+                    # Output the recent creatives data as CSV
+                    recent_output = recent_data.to_csv(index=False)
+                    st.download_button("Download Recently Tested Creatives CSV", recent_output.encode('utf-8'), "Recently_Tested_Creatives.csv")
+
+                    # Check if any recent creatives are in the top 20 of Lumina Score
+                    top_20_creatives = aggregated_data.head(20)['creative_id'].tolist()
+                    top_recent_creatives = [creative for creative in recent_creatives if creative in top_20_creatives]
+
+                    if top_recent_creatives:
+                        st.write(f"**Congratulations!** The following recently tested creatives are in the top 20 Lumina Scores:")
+                        for creative in top_recent_creatives:
+                            st.write(f"- {creative}")
+                    else:
+                        st.write("None of the recently tested creatives are in the top 20 Lumina Scores.")
+                else:
+                    st.write("No data found for the recently tested creatives provided.")
