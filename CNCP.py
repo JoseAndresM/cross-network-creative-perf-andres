@@ -56,7 +56,7 @@ def sigmoid(x):
     return 100 / (1 + np.exp(-x))
 
 # Streamlit app
-st.title("Creative Performance Analyzer")
+st.title("Lumina - Cross Network Creative Performance Analyzer")
 
 # File upload section
 st.sidebar.header("Upload Files")
