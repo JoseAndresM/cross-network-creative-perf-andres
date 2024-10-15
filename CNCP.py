@@ -83,9 +83,9 @@ st.sidebar.write("Adjust the weights for each metric used in the Lumina Score ca
 # Spend weight is fixed at +1 (positive to promote scalability)
 
 # Input fields for other weights
-weight_roas_diff = st.sidebar.number_input("Weight for ROAS Difference", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
-weight_roas_mat_d3 = st.sidebar.number_input("Weight for ROAS Maturation D3", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
-weight_ipm = st.sidebar.number_input("Weight for IPM", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
+weight_roas_diff = st.sidebar.number_input("Weight for ROAS Difference", min_value=-5.0, max_value=5.0, value=1.0, step=0.1)
+weight_roas_mat_d3 = st.sidebar.number_input("Weight for ROAS Maturation D3", min_value=-5.0, max_value=5.0, value=1.0, step=0.1)
+weight_ipm = st.sidebar.number_input("Weight for IPM", min_value=-5.0, max_value=5.0, value=1.0, step=0.1)
 
 # First-time run toggle
 first_time_run = st.sidebar.checkbox("First-time run (No Previous Tested Creatives CSV)")
@@ -218,13 +218,8 @@ if new_file and game_code:
                 aggregated_data['z_IPM'] * weights['z_IPM']
             )
 
-            # Step 14: Scale the weighted sum to [-6, +6]
-            min_ws = aggregated_data['weighted_sum'].min()
-            max_ws = aggregated_data['weighted_sum'].max()
-            aggregated_data['scaled_weighted_sum'] = (aggregated_data['weighted_sum'] - min_ws) / (max_ws - min_ws + 1e-8) * 12 - 6
-
-            # Apply sigmoid function to the scaled weighted sums
-            aggregated_data['Lumina_Score'] = sigmoid(aggregated_data['scaled_weighted_sum']) * 100  # Scale to 0-100
+            # Step 14: Apply sigmoid function to the negative weighted sums
+            aggregated_data['Lumina_Score'] = sigmoid(-aggregated_data['weighted_sum']) * 100  # Scale to 0-100
 
             # Apply 15% penalty for installs < 5
             aggregated_data.loc[aggregated_data['installs'] < 5, 'Lumina_Score'] *= 0.85
