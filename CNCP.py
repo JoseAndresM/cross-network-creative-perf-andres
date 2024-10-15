@@ -208,7 +208,7 @@ if new_file and game_code:
 
             # Step 14: Use weights on capped z-scores
             weights = {
-                'z_cost': 1.0,  # Fixed weight to promote scalability
+                'z_cost': 1.8,  # Fixed weight to promote scalability
                 'z_ROAS_diff': weight_roas_diff,
                 'z_ROAS_Mat_D3': weight_roas_mat_d3,
                 'z_IPM': weight_ipm
