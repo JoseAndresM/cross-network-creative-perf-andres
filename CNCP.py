@@ -20,6 +20,13 @@ def calculate_robust_zscore(series):
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
+# Min-max scaling function for weighted sums
+def scale_weighted_sum(weighted_sum):
+    min_ws = weighted_sum.min()
+    max_ws = weighted_sum.max()
+    # Scale to [-6, +6]
+    return (weighted_sum - min_ws) / (max_ws - min_ws + 1e-8) * 12 - 6
+
 # Updated function to extract the creative identifier based on the game code
 def extract_creative_id(name, game_code):
     # Remove any playables suffixes after '_EN', '_EN_PAD', or '_WW'
@@ -218,8 +225,11 @@ if new_file and game_code:
                 aggregated_data['z_IPM'] * weights['z_IPM']
             )
 
-            # Step 14: Apply sigmoid function to the weighted sums
-            aggregated_data['Lumina_Score'] = sigmoid(aggregated_data['weighted_sum']) * 100  # Scale to 0-100
+            # Step 14: Scale the weighted sums to [-6, +6]
+            aggregated_data['scaled_weighted_sum'] = scale_weighted_sum(aggregated_data['weighted_sum'])
+
+            # Apply sigmoid function to the scaled weighted sums
+            aggregated_data['Lumina_Score'] = sigmoid(aggregated_data['scaled_weighted_sum']) * 100  # Scale to 0-100
 
             # Apply 15% penalty for installs < 5
             aggregated_data.loc[aggregated_data['installs'] < 5, 'Lumina_Score'] *= 0.85
