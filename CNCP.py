@@ -10,11 +10,24 @@ def load_tested_creatives(uploaded_file):
     else:
         return pd.DataFrame(columns=['creative_id'])
 
+# Function to calculate robust z-scores
+def calculate_robust_zscore(series):
+    median = series.median()
+    mad = np.median(np.abs(series - median))
+    return (series - median) / (mad if mad else 1)
+
+# Min-max scaling function
+def min_max_scale(series, epsilon=1e-8):
+    return (series - series.min()) / (series.max() - series.min() + epsilon)
+
+# Sigmoid function
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
 # Updated function to extract the creative identifier based on the game code
 def extract_creative_id(name, game_code):
-    # Remove any playables suffixes after '_EN_PAD' or similar markers
-    # First, split the name by '_EN_PAD' or '_EN_' or '_WW_' to remove trailing playables
-    name = re.split(r'_(EN|WW)_', name)[0]
+    # Remove any playables suffixes after '_EN', '_EN_PAD', or '_WW'
+    name = re.split(r'_(EN|EN_PAD|WW|WW_PAD)_', name)[0]
     parts = name.split('_')
     try:
         # Find the index of the game code in the parts
@@ -47,16 +60,8 @@ def categorize_creative(row, average_ipm, average_cost, average_roas_d0, impress
     else:
         return 'Average Performance'
 
-# Function to calculate z-scores manually
-def calculate_zscore(series):
-    return (series - series.mean()) / series.std(ddof=0)
-
-# Sigmoid function
-def sigmoid(x):
-    return 100 / (1 + np.exp(-x))
-
 # Streamlit app
-st.title("Lumina - Cross Network Creative Performance Analyzer")
+st.title("Creative Performance Analyzer")
 
 # File upload section
 st.sidebar.header("Upload Files")
@@ -190,15 +195,16 @@ if new_file and game_code:
             aggregated_data['ROAS_Mat_D3'].replace([float('inf'), -float('inf'), np.nan], 0, inplace=True)
             aggregated_data['ROAS_Mat_D3'] = aggregated_data['ROAS_Mat_D3'].round(2)
 
-            # Step 12: Handle NaN values and check for zero variance before calculating z-scores
+            # Step 12: Handle NaN values and check for zero MAD before calculating robust z-scores
             for col in ['ROAS_Mat_D3', 'cost', 'ROAS_diff', 'IPM']:
                 # Replace spaces and dots in column names
                 col_name = col.replace(" ", "_").replace(".", "")
-                if aggregated_data[col].var(ddof=0) == 0:
+                mad = np.median(np.abs(aggregated_data[col] - aggregated_data[col].median()))
+                if mad == 0:
                     aggregated_data[f'z_{col_name}'] = 0
                 else:
-                    aggregated_data[col].fillna(aggregated_data[col].mean(), inplace=True)
-                    aggregated_data[f'z_{col_name}'] = calculate_zscore(aggregated_data[col])
+                    aggregated_data[col].fillna(aggregated_data[col].median(), inplace=True)
+                    aggregated_data[f'z_{col_name}'] = calculate_robust_zscore(aggregated_data[col])
 
             # Step 13: Use weights on z-scores
             weights = {
@@ -208,20 +214,22 @@ if new_file and game_code:
                 'z_IPM': weight_ipm
             }
 
-            # Step 14: Calculate Lumina Score using weighted sum of z-scores and apply 15% penalty for installs < 5
-            def calculate_lumina_score(row):
-                weighted_sum = (
-                    row['z_cost'] * weights['z_cost'] +
-                    row['z_ROAS_diff'] * weights['z_ROAS_diff'] +
-                    row['z_ROAS_Mat_D3'] * weights['z_ROAS_Mat_D3'] +
-                    row['z_IPM'] * weights['z_IPM']
-                )
-                lumina_score = sigmoid(weighted_sum)
-                if row['installs'] < 5:
-                    lumina_score *= 0.85  # Penalize by 15%
-                return lumina_score
+            # Step 14: Calculate weighted sums for Lumina Score
+            aggregated_data['weighted_sum'] = (
+                aggregated_data['z_cost'] * weights['z_cost'] +
+                aggregated_data['z_ROAS_diff'] * weights['z_ROAS_diff'] +
+                aggregated_data['z_ROAS_Mat_D3'] * weights['z_ROAS_Mat_D3'] +
+                aggregated_data['z_IPM'] * weights['z_IPM']
+            )
 
-            aggregated_data['Lumina_Score'] = aggregated_data.apply(calculate_lumina_score, axis=1)
+            # Apply min-max scaling to the weighted sums
+            aggregated_data['scaled_weighted_sum'] = min_max_scale(aggregated_data['weighted_sum'])
+
+            # Apply sigmoid function to the scaled weighted sums
+            aggregated_data['Lumina_Score'] = sigmoid(aggregated_data['scaled_weighted_sum']) * 100  # Scale to 0-100
+
+            # Apply 15% penalty for installs < 5
+            aggregated_data.loc[aggregated_data['installs'] < 5, 'Lumina_Score'] *= 0.85
 
             # Step 15: Calculate averages
             average_ipm = aggregated_data['IPM'].mean()
