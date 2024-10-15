@@ -16,10 +16,6 @@ def calculate_robust_zscore(series):
     mad = np.median(np.abs(series - median))
     return (series - median) / (mad if mad else 1)
 
-# Min-max scaling function
-def min_max_scale(series, epsilon=1e-8):
-    return (series - series.min()) / (series.max() - series.min() + epsilon)
-
 # Sigmoid function
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
@@ -87,9 +83,9 @@ st.sidebar.write("Adjust the weights for each metric used in the Lumina Score ca
 # Spend weight is fixed at +1 (positive to promote scalability)
 
 # Input fields for other weights
-weight_roas_diff = st.sidebar.number_input("Weight for ROAS Difference", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
-weight_roas_mat_d3 = st.sidebar.number_input("Weight for ROAS Maturation D3", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
-weight_ipm = st.sidebar.number_input("Weight for IPM", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
+weight_roas_diff = st.sidebar.number_input("Weight for ROAS Difference", min_value=-5.0, max_value=5.0, value=1.0, step=0.1)
+weight_roas_mat_d3 = st.sidebar.number_input("Weight for ROAS Maturation D3", min_value=-5.0, max_value=5.0, value=1.0, step=0.1)
+weight_ipm = st.sidebar.number_input("Weight for IPM", min_value=-5.0, max_value=5.0, value=1.0, step=0.1)
 
 # First-time run toggle
 first_time_run = st.sidebar.checkbox("First-time run (No Previous Tested Creatives CSV)")
@@ -206,40 +202,34 @@ if new_file and game_code:
                     aggregated_data[col].fillna(aggregated_data[col].median(), inplace=True)
                     aggregated_data[f'z_{col_name}'] = calculate_robust_zscore(aggregated_data[col])
 
-            # Step 13: Apply min-max scaling to individual z-scores
-            for col in ['z_ROAS_Mat_D3', 'z_cost', 'z_ROAS_diff', 'z_IPM']:
-                aggregated_data[f'scaled_{col}'] = min_max_scale(aggregated_data[col])
+            # Step 13: Cap z-scores at +/-3 to mitigate outliers
+            for col in ['z_cost', 'z_ROAS_diff', 'z_ROAS_Mat_D3', 'z_IPM']:
+                aggregated_data[col] = np.clip(aggregated_data[col], -3, 3)
 
-            # Step 14: Use weights on scaled z-scores
+            # Step 14: Use weights on capped z-scores
             weights = {
-                'scaled_z_cost': 1.7,  # Fixed weight to promote scalability
-                'scaled_z_ROAS_diff': weight_roas_diff,
-                'scaled_z_ROAS_Mat_D3': weight_roas_mat_d3,
-                'scaled_z_IPM': weight_ipm
+                'z_cost': 1.5,  # Fixed weight to promote scalability
+                'z_ROAS_diff': weight_roas_diff,
+                'z_ROAS_Mat_D3': weight_roas_mat_d3,
+                'z_IPM': weight_ipm
             }
 
             # Calculate weighted sums for Lumina Score
             aggregated_data['weighted_sum'] = (
-                aggregated_data['scaled_z_cost'] * weights['scaled_z_cost'] +
-                aggregated_data['scaled_z_ROAS_diff'] * weights['scaled_z_ROAS_diff'] +
-                aggregated_data['scaled_z_ROAS_Mat_D3'] * weights['scaled_z_ROAS_Mat_D3'] +
-                aggregated_data['scaled_z_IPM'] * weights['scaled_z_IPM']
+                aggregated_data['z_cost'] * weights['z_cost'] +
+                aggregated_data['z_ROAS_diff'] * weights['z_ROAS_diff'] +
+                aggregated_data['z_ROAS_Mat_D3'] * weights['z_ROAS_Mat_D3'] +
+                aggregated_data['z_IPM'] * weights['z_IPM']
             )
 
-            # Step 15: Apply sigmoid function to the weighted sum
-            aggregated_data['lumina_score_raw'] = sigmoid(aggregated_data['weighted_sum'])
+            # Step 15: Calculate robust z-score of the weighted sums
+            aggregated_data['weighted_sum_zscore'] = calculate_robust_zscore(aggregated_data['weighted_sum'])
 
-            # Step 16: Normalize Lumina Scores to 0-100
-            min_score = aggregated_data['lumina_score_raw'].min()
-            max_score = aggregated_data['lumina_score_raw'].max()
-            aggregated_data['Lumina_Score'] = (aggregated_data['lumina_score_raw'] - min_score) / (max_score - min_score + 1e-8) * 100
+            # Step 16: Apply sigmoid function to the weighted_sum_zscore
+            aggregated_data['Lumina_Score'] = sigmoid(aggregated_data['weighted_sum_zscore']) * 100  # Scale to 0-100
 
-            # Apply penalties
+            # Apply 15% penalty for installs < 5
             aggregated_data.loc[aggregated_data['installs'] < 5, 'Lumina_Score'] *= 0.85
-            aggregated_data.loc[aggregated_data['IPM'] < 0.5, 'Lumina_Score'] *= 0.85
-
-            # Ensure Lumina_Score is between 0 and 100
-            aggregated_data['Lumina_Score'] = aggregated_data['Lumina_Score'].clip(0, 100)
 
             # Step 17: Calculate averages
             average_ipm = aggregated_data['IPM'].mean()
