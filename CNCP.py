@@ -16,9 +16,9 @@ def calculate_robust_zscore(series):
     mad = np.median(np.abs(series - median))
     return (series - median) / (mad if mad else 1)
 
-# Min-max scaling function
-def min_max_scale(series, epsilon=1e-8):
-    return (series - series.min()) / (series.max() - series.min() + epsilon)
+# Sigmoid function
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
 
 # Updated function to extract the creative identifier based on the game code
 def extract_creative_id(name, game_code):
@@ -57,7 +57,7 @@ def categorize_creative(row, average_ipm, average_cost, average_roas_d0, impress
         return 'Average Performance'
 
 # Streamlit app
-st.title("Lumina - Cross Network Creative Performance Analyzer")
+st.title("Creative Performance Analyzer")
 
 # File upload section
 st.sidebar.header("Upload Files")
@@ -202,54 +202,55 @@ if new_file and game_code:
                     aggregated_data[col].fillna(aggregated_data[col].median(), inplace=True)
                     aggregated_data[f'z_{col_name}'] = calculate_robust_zscore(aggregated_data[col])
 
-            # Step 13: Apply min-max scaling to individual z-scores
-            for col in ['z_ROAS_Mat_D3', 'z_cost', 'z_ROAS_diff', 'z_IPM']:
-                aggregated_data[f'scaled_{col}'] = min_max_scale(aggregated_data[col])
-
-            # Step 14: Use weights on scaled z-scores
+            # Step 13: Use weights on z-scores
             weights = {
-                'scaled_z_cost': 2.0,  # Fixed weight to promote scalability
-                'scaled_z_ROAS_diff': weight_roas_diff,
-                'scaled_z_ROAS_Mat_D3': weight_roas_mat_d3,
-                'scaled_z_IPM': weight_ipm
+                'z_cost': 1.0,  # Fixed weight to promote scalability
+                'z_ROAS_diff': weight_roas_diff,
+                'z_ROAS_Mat_D3': weight_roas_mat_d3,
+                'z_IPM': weight_ipm
             }
 
             # Calculate weighted sums for Lumina Score
             aggregated_data['weighted_sum'] = (
-                aggregated_data['scaled_z_cost'] * weights['scaled_z_cost'] +
-                aggregated_data['scaled_z_ROAS_diff'] * weights['scaled_z_ROAS_diff'] +
-                aggregated_data['scaled_z_ROAS_Mat_D3'] * weights['scaled_z_ROAS_Mat_D3'] +
-                aggregated_data['scaled_z_IPM'] * weights['scaled_z_IPM']
+                aggregated_data['z_cost'] * weights['z_cost'] +
+                aggregated_data['z_ROAS_diff'] * weights['z_ROAS_diff'] +
+                aggregated_data['z_ROAS_Mat_D3'] * weights['z_ROAS_Mat_D3'] +
+                aggregated_data['z_IPM'] * weights['z_IPM']
             )
 
-            # Step 15: Scale the weighted sum to 0-100
-            aggregated_data['Lumina_Score'] = min_max_scale(aggregated_data['weighted_sum']) * 100
+            # Step 14: Scale the weighted sum to [-6, +6]
+            min_ws = aggregated_data['weighted_sum'].min()
+            max_ws = aggregated_data['weighted_sum'].max()
+            aggregated_data['scaled_weighted_sum'] = (aggregated_data['weighted_sum'] - min_ws) / (max_ws - min_ws + 1e-8) * 12 - 6
+
+            # Apply sigmoid function to the scaled weighted sums
+            aggregated_data['Lumina_Score'] = sigmoid(aggregated_data['scaled_weighted_sum']) * 100  # Scale to 0-100
 
             # Apply 15% penalty for installs < 5
             aggregated_data.loc[aggregated_data['installs'] < 5, 'Lumina_Score'] *= 0.85
 
-            # Step 16: Calculate averages
+            # Step 15: Calculate averages
             average_ipm = aggregated_data['IPM'].mean()
             average_cost = aggregated_data['cost'].mean()
             average_roas_d0 = aggregated_data['ROAS_d0'].mean()
 
-            # Step 17: Categorize creatives with updated function
+            # Step 16: Categorize creatives with updated function
             aggregated_data['Category'] = aggregated_data.apply(
                 lambda row: categorize_creative(
                     row, average_ipm, average_cost, average_roas_d0, impressions_threshold
                 ), axis=1
             )
             
-            # Step 18: Sort by Lumina Score
+            # Step 17: Sort by Lumina Score
             aggregated_data.sort_values(by='Lumina_Score', ascending=False, inplace=True)
             aggregated_data.reset_index(drop=True, inplace=True)
             aggregated_data.index += 1  # Start index from 1 for ranking
 
-            # Step 19: Output the overall creative performance data as CSV
+            # Step 18: Output the overall creative performance data as CSV
             overall_output = aggregated_data.to_csv(index=False)
             st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
 
-            # Step 20: Handle recently tested creatives if provided
+            # Step 19: Handle recently tested creatives if provided
             if recent_creatives_input.strip():
                 recent_creatives = [line.strip() for line in recent_creatives_input.strip().split('\n') if line.strip()]
                 recent_data = aggregated_data[aggregated_data['creative_id'].isin(recent_creatives)]
