@@ -218,8 +218,8 @@ if new_file and game_code:
                 aggregated_data['z_IPM'] * weights['z_IPM']
             )
 
-            # Step 14: Apply sigmoid function to the negative weighted sums
-            aggregated_data['Lumina_Score'] = sigmoid(-aggregated_data['weighted_sum']) * 100  # Scale to 0-100
+            # Step 14: Apply sigmoid function to the weighted sums
+            aggregated_data['Lumina_Score'] = sigmoid(aggregated_data['weighted_sum']) * 100  # Scale to 0-100
 
             # Apply 15% penalty for installs < 5
             aggregated_data.loc[aggregated_data['installs'] < 5, 'Lumina_Score'] *= 0.85
