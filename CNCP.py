@@ -25,25 +25,25 @@ def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
 def extract_creative_id(name, game_code):
-    # Remove any suffixes after '_EN', '_EN_PAD', '_WW', '_WW_PAD', including optional trailing underscores
-    name = re.split(r'_(EN|EN_PAD|WW|WW_PAD)_?', name)[0]
+    # Split the name into parts
     parts = name.split('_')
-    try:
-        index = parts.index(game_code)
-        if index + 2 < len(parts):
-            part_cre = parts[index + 1]
-            part_v = parts[index + 2]
-            # Check for 'C', 'R', or 'E' followed by digits
+    # Find all indices where the game code appears
+    indices = [i for i, part in enumerate(parts) if part == game_code]
+    for index in indices:
+        # Look ahead for 'C', 'R', or 'E' followed by digits, and 'V' followed by digits
+        for i in range(index + 1, len(parts) - 1):
+            part_cre = parts[i]
+            part_v = parts[i + 1]
             if re.match(r'^[CRE]\d+$', part_cre) and re.match(r'^V\d+$', part_v):
                 return f"{game_code}_{part_cre}_{part_v}"
-            else:
-                return 'unknown'
-        else:
-            return 'unknown'
-    except ValueError:
-        return 'unknown'
-
-
+    # If not found, try to find 'C', 'R', or 'E' followed by digits, and 'V' followed by digits anywhere in the name
+    for i in range(len(parts) - 1):
+        part_cre = parts[i]
+        part_v = parts[i + 1]
+        if re.match(r'^[CRE]\d+$', part_cre) and re.match(r'^V\d+$', part_v):
+            # Use the game code as provided
+            return f"{game_code}_{part_cre}_{part_v}"
+    return 'unknown'
 
 # Function to categorize creatives
 def categorize_creative(row, average_ipm, average_cost, average_roas_d0, impressions_threshold):
