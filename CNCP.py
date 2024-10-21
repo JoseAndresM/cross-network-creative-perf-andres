@@ -25,20 +25,24 @@ def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
 def extract_creative_id(name, game_code):
-    # Remove any suffixes after '_EN', '_EN_PAD', '_WW', '_WW_PAD'
-    name = re.split(r'_(EN|EN_PAD|WW|WW_PAD)(?=_|$)', name)[0]
+    # Remove any suffixes after '_EN', '_EN_PAD', '_WW', '_WW_PAD', including optional trailing underscores
+    name = re.split(r'_(EN|EN_PAD|WW|WW_PAD)_?', name)[0]
     parts = name.split('_')
     try:
         index = parts.index(game_code)
         if index + 2 < len(parts):
             part_cre = parts[index + 1]
             part_v = parts[index + 2]
-            # Match 'C<number>', 'R<number>', or 'E<number>'
+            # Check for 'C', 'R', or 'E' followed by digits
             if re.match(r'^[CRE]\d+$', part_cre) and re.match(r'^V\d+$', part_v):
                 return f"{game_code}_{part_cre}_{part_v}"
-        return 'unknown'
+            else:
+                return 'unknown'
+        else:
+            return 'unknown'
     except ValueError:
         return 'unknown'
+
 
 
 # Function to categorize creatives
