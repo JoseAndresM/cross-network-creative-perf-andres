@@ -30,11 +30,11 @@ def extract_creative_id(name, game_code):
         index = parts.index(game_code)
         # Ensure there are enough parts after the game code
         if index + 2 < len(parts):
-            part_cr = parts[index + 1]
+            part_cre = parts[index + 1]
             part_v = parts[index + 2]
-            # Check if the next parts match 'C<number>' or 'R<number>' and 'V<number>'
-            if re.match(r'^[CR]\d+$', part_cr) and re.match(r'^V\d+$', part_v):
-                return f"{game_code}_{part_cr}_{part_v}"
+            # Check if the next parts match 'C<number>', 'R<number>', or 'E<number>' and 'V<number>'
+            if re.match(r'^[CRE]\d+$', part_cre) and re.match(r'^V\d+$', part_v):
+                return f"{game_code}_{part_cre}_{part_v}"
             else:
                 return 'unknown'
         else:
@@ -42,7 +42,6 @@ def extract_creative_id(name, game_code):
     except ValueError:
         # Game code not found in parts
         return 'unknown'
-
 # Function to categorize creatives
 def categorize_creative(row, average_ipm, average_cost, average_roas_d0, impressions_threshold):
     if row['network_impressions'] < impressions_threshold:
