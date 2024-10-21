@@ -219,7 +219,7 @@ if new_file and game_code:
 
             # Step 14: Use weights on scaled z-scores
             weights = {
-                'scaled_z_cost': 1.5,  # Fixed weight to promote scalability
+                'scaled_z_cost': 1.8,  # Fixed weight to promote scalability
                 'scaled_z_ROAS_diff': weight_roas_diff,
                 'scaled_z_ROAS_Mat_D3': weight_roas_mat_d3,
                 'scaled_z_IPM': weight_ipm
