@@ -24,28 +24,22 @@ def min_max_scale(series, epsilon=1e-8):
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
-# Updated function to extract the creative identifier based on the game code
 def extract_creative_id(name, game_code):
-    # Remove any playables suffixes after '_EN', '_EN_PAD', or '_WW'
-    name = re.split(r'_(EN|EN_PAD|WW|WW_PAD)(_|$)', name)[0]
+    # Remove any suffixes after '_EN', '_EN_PAD', '_WW', '_WW_PAD'
+    name = re.split(r'_(EN|EN_PAD|WW|WW_PAD)(?=_|$)', name)[0]
     parts = name.split('_')
     try:
-        # Find the index of the game code in the parts
         index = parts.index(game_code)
-        # Ensure there are enough parts after the game code
         if index + 2 < len(parts):
             part_cre = parts[index + 1]
             part_v = parts[index + 2]
-            # Check if the next parts match 'C<number>', 'R<number>', or 'E<number>' and 'V<number>'
+            # Match 'C<number>', 'R<number>', or 'E<number>'
             if re.match(r'^[CRE]\d+$', part_cre) and re.match(r'^V\d+$', part_v):
                 return f"{game_code}_{part_cre}_{part_v}"
-            else:
-                return 'unknown'
-        else:
-            return 'unknown'
-    except ValueError:
-        # Game code not found in parts
         return 'unknown'
+    except ValueError:
+        return 'unknown'
+
 
 # Function to categorize creatives
 def categorize_creative(row, average_ipm, average_cost, average_roas_d0, impressions_threshold):
