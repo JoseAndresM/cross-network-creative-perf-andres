@@ -24,26 +24,21 @@ def min_max_scale(series, epsilon=1e-8):
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
+# Updated function to extract the creative identifier based on the game code
 def extract_creative_id(name, game_code):
-    # Split the name into parts
-    parts = name.split('_')
-    # Find all indices where the game code appears
-    indices = [i for i, part in enumerate(parts) if part == game_code]
-    for index in indices:
-        # Look ahead for 'C', 'R', or 'E' followed by digits, and 'V' followed by digits
-        for i in range(index + 1, len(parts) - 1):
-            part_cre = parts[i]
-            part_v = parts[i + 1]
-            if re.match(r'^[CRE]\d+$', part_cre) and re.match(r'^V\d+$', part_v):
-                return f"{game_code}_{part_cre}_{part_v}"
-    # If not found, try to find 'C', 'R', or 'E' followed by digits, and 'V' followed by digits anywhere in the name
-    for i in range(len(parts) - 1):
-        part_cre = parts[i]
-        part_v = parts[i + 1]
-        if re.match(r'^[CRE]\d+$', part_cre) and re.match(r'^V\d+$', part_v):
-            # Use the game code as provided
-            return f"{game_code}_{part_cre}_{part_v}"
-    return 'unknown'
+    # First, try to find pattern 'game_code_[CRE]<number>_V<number>'
+    pattern = rf'{game_code}_([CRE]\d+_V\d+)'
+    match = re.search(pattern, name)
+    if match:
+        return f"{game_code}_{match.group(1)}"
+    else:
+        # If not found, try to find any occurrence of '[CRE]\d+_V\d+'
+        pattern = r'([CRE]\d+_V\d+)'
+        match = re.search(pattern, name)
+        if match:
+            return f"{game_code}_{match.group(1)}"
+        else:
+            return 'unknown'
 
 # Function to categorize creatives
 def categorize_creative(row, average_ipm, average_cost, average_roas_d0, impressions_threshold):
@@ -104,25 +99,29 @@ if new_file and game_code:
     if 'creative_network' not in new_data.columns:
         st.error("The uploaded new report CSV does not contain a 'creative_network' column.")
     else:
-        # Step 2: Filter out irrelevant creatives
-        exclude_creative_ids = [
-            'Search SearchPartners', 'Search GoogleSearch', 'Youtube YouTubeVideos',
-            'Display', 'TTCC_0021_Ship Craft - Gaming App'
-        ]
-        # Exclude creatives that start with '3PRewardedPlayable' or '3PPlayable_'
-        new_data = new_data[~new_data['creative_network'].str.startswith(('3PRewardedPlayable', '3PPlayable_'))]
-        new_data = new_data[~new_data['creative_network'].isin(exclude_creative_ids)]
-        new_data = new_data[~new_data['creative_network'].str.startswith('TTCC')]
-
+        # Step 2: Minimal filtering to avoid excluding desired creatives
+        # Uncomment and adjust filters if needed
+        # exclude_creative_ids = [
+        #     'Search SearchPartners', 'Search GoogleSearch', 'Youtube YouTubeVideos',
+        #     'Display', 'TTCC_0021_Ship Craft - Gaming App'
+        # ]
+        # new_data = new_data[~new_data['creative_network'].isin(exclude_creative_ids)]
+        
         # Step 3: Extract creative IDs using the updated function
-        new_data['creative_id'] = new_data.apply(lambda row: extract_creative_id(row['creative_network'], game_code), axis=1)
+        new_data['creative_id'] = new_data.apply(lambda row: extract_creative_id(str(row['creative_network']), game_code), axis=1)
 
         # Debugging: Identify creatives with 'unknown' IDs
-        unknown_creatives = new_data[new_data['creative_id'] == 'unknown']['creative_network']
-        if not unknown_creatives.empty:
+        unknown_creatives = new_data[new_data['creative_id'] == 'unknown']['creative_network'].unique()
+        if unknown_creatives.size > 0:
             st.write("Creatives with 'unknown' IDs:")
             st.write(unknown_creatives)
 
+        # Check if the specific creative is labeled as 'unknown'
+        specific_creative_name = 'DVS_C8_V44_EN_VID_1080x1920_36s'
+        if specific_creative_name in unknown_creatives:
+            st.write(f"Creative '{specific_creative_name}' is being labeled as 'unknown'.")
+
+        # Remove creatives with 'unknown' IDs
         new_data = new_data[new_data['creative_id'] != 'unknown']
 
         # Step 4: Ensure required columns exist before aggregation
@@ -176,18 +175,21 @@ if new_file and game_code:
                                                   0)
 
             # Step 8: Calculate IPM using network_impressions
-            aggregated_data['IPM'] = (aggregated_data['installs'] / aggregated_data['network_impressions']) * 1000
+            aggregated_data['IPM'] = np.where(aggregated_data['network_impressions'] != 0,
+                                              (aggregated_data['installs'] / aggregated_data['network_impressions']) * 1000,
+                                              0)
             aggregated_data['IPM'].replace([float('inf'), -float('inf')], 0, inplace=True)
             aggregated_data['IPM'] = aggregated_data['IPM'].round(2)
-            
-            # Step 9: Exclude outliers in IPM
-            Q1 = aggregated_data['IPM'].quantile(0.25)
-            Q3 = aggregated_data['IPM'].quantile(0.75)
-            IQR = Q3 - Q1
-            lower_bound = Q1 - 1.5 * IQR
-            upper_bound = Q3 + 1.5 * IQR
-            aggregated_data = aggregated_data[(aggregated_data['IPM'] >= lower_bound) & (aggregated_data['IPM'] <= upper_bound)]
-            
+
+            # Step 9: (Optional) Exclude outliers in IPM
+            # Uncomment if needed
+            # Q1 = aggregated_data['IPM'].quantile(0.25)
+            # Q3 = aggregated_data['IPM'].quantile(0.75)
+            # IQR = Q3 - Q1
+            # lower_bound = Q1 - 1.5 * IQR
+            # upper_bound = Q3 + 1.5 * IQR
+            # aggregated_data = aggregated_data[(aggregated_data['IPM'] >= lower_bound) & (aggregated_data['IPM'] <= upper_bound)]
+
             # Step 10: Calculate ROAS diff using calculated ROAS_d0
             aggregated_data['ROAS_diff'] = aggregated_data['ROAS_d0'] - target_roas_d0
 
@@ -217,7 +219,7 @@ if new_file and game_code:
 
             # Step 14: Use weights on scaled z-scores
             weights = {
-                'scaled_z_cost': 1.8,  # Fixed weight to promote scalability
+                'scaled_z_cost': 1.0,  # Fixed weight to promote scalability
                 'scaled_z_ROAS_diff': weight_roas_diff,
                 'scaled_z_ROAS_Mat_D3': weight_roas_mat_d3,
                 'scaled_z_IPM': weight_ipm
@@ -240,8 +242,8 @@ if new_file and game_code:
             aggregated_data['Lumina_Score'] = (aggregated_data['lumina_score_raw'] - min_score) / (max_score - min_score + 1e-8) * 100
 
             # Apply penalties
-            aggregated_data.loc[aggregated_data['installs'] < 10, 'Lumina_Score'] *= 0.50
-            aggregated_data.loc[aggregated_data['IPM'] < 7, 'Lumina_Score'] *= 0.85
+            aggregated_data.loc[aggregated_data['installs'] < 5, 'Lumina_Score'] *= 0.85
+            aggregated_data.loc[aggregated_data['IPM'] < 0.5, 'Lumina_Score'] *= 0.85
 
             # Ensure Lumina_Score is between 0 and 100
             aggregated_data['Lumina_Score'] = aggregated_data['Lumina_Score'].clip(0, 100)
