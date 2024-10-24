@@ -77,7 +77,7 @@ st.sidebar.header("Weights Settings")
 st.sidebar.write("Adjust the weights for each metric used in the Lumina Score calculation.")
 
 # Spend weight is fixed at +1 (positive to promote scalability)
-weight_cost = 1.0  # Fixed weight
+weight_cost = 2.0  # Fixed weight
 
 # Input fields for other weights
 weight_roas_diff = st.sidebar.number_input("Weight for ROAS Difference", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
