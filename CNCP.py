@@ -10,14 +10,12 @@ def load_tested_creatives(uploaded_file):
     else:
         return pd.DataFrame(columns=['creative_id'])
 
-# Function to calculate robust z-scores
-def calculate_robust_zscore(series):
+# Updated function to calculate robust z-scores with epsilon
+def calculate_robust_zscore(series, epsilon=1e-6):
     median = series.median()
     mad = np.median(np.abs(series - median))
-    if mad == 0:
-        return (series - median)
-    else:
-        return (series - median) / mad
+    mad = mad if mad > epsilon else epsilon  # Ensure MAD is not too small
+    return (series - median) / mad
 
 # Min-max scaling function
 def min_max_scale(series, epsilon=1e-8):
@@ -77,7 +75,7 @@ st.sidebar.header("Weights Settings")
 st.sidebar.write("Adjust the weights for each metric used in the Lumina Score calculation.")
 
 # Spend weight is fixed at +1 (positive to promote scalability)
-weight_cost = 1.8  # Fixed weight
+weight_cost = 1.85  # Fixed weight
 
 # Input fields for other weights
 weight_roas_diff = st.sidebar.number_input("Weight for ROAS Difference", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
@@ -182,18 +180,23 @@ if new_file and game_code:
             aggregated_data['ROAS_Mat_D3'].replace([float('inf'), -float('inf'), np.nan], 0, inplace=True)
             aggregated_data['ROAS_Mat_D3'] = aggregated_data['ROAS_Mat_D3'].round(2)
 
-            # Step 11: Handle NaN values and check for zero MAD before calculating robust z-scores
+            # Step 11: Handle NaN values and calculate robust z-scores
             for col in ['ROAS_Mat_D3', 'cost', 'ROAS_diff', 'IPM']:
                 # Replace spaces and dots in column names
                 col_name = col.replace(" ", "_").replace(".", "")
                 aggregated_data[col].fillna(aggregated_data[col].median(), inplace=True)
+                # Calculate and display median and MAD for debugging
+                median = aggregated_data[col].median()
+                mad = np.median(np.abs(aggregated_data[col] - median))
+                st.write(f"Column: {col}, Median: {median}, MAD: {mad}")
                 aggregated_data[f'z_{col_name}'] = calculate_robust_zscore(aggregated_data[col])
 
-            # Step 12: Cap z-scores at +/-3 to mitigate outliers
-            for col in ['z_ROAS_Mat_D3', 'z_cost', 'z_ROAS_diff', 'z_IPM']:
-                aggregated_data[col] = np.clip(aggregated_data[col], -3, 3)
+            # Step 12: Optionally cap z-scores at +/-3
+            # Consider removing capping if z-scores are within a reasonable range
+            # for col in ['z_ROAS_Mat_D3', 'z_cost', 'z_ROAS_diff', 'z_IPM']:
+            #     aggregated_data[col] = np.clip(aggregated_data[col], -3, 3)
 
-            # Step 13: Use weights on capped z-scores
+            # Step 13: Use weights on z-scores
             weights = {
                 'z_cost': weight_cost,  # Fixed weight to promote scalability
                 'z_ROAS_diff': weight_roas_diff,
@@ -215,8 +218,8 @@ if new_file and game_code:
             aggregated_data['Lumina_Score'] = (aggregated_data['weighted_sum'] - min_score) / (max_score - min_score + 1e-8) * 100
 
             # Apply penalties
-            aggregated_data.loc[aggregated_data['installs'] < 5, 'Lumina_Score'] *= 0.25
-            aggregated_data.loc[aggregated_data['IPM'] < 5, 'Lumina_Score'] *= 0.85
+            aggregated_data.loc[aggregated_data['installs'] < 5, 'Lumina_Score'] *= 0.5
+            aggregated_data.loc[aggregated_data['IPM'] < 3, 'Lumina_Score'] *= 0.85
 
             # Ensure Lumina_Score is between 0 and 100
             aggregated_data['Lumina_Score'] = aggregated_data['Lumina_Score'].clip(0, 100)
