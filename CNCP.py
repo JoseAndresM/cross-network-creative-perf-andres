@@ -77,7 +77,7 @@ st.sidebar.header("Weights Settings")
 st.sidebar.write("Adjust the weights for each metric used in the Lumina Score calculation.")
 
 # Spend weight is fixed at +1 (positive to promote scalability)
-weight_cost = 1.0  # Fixed weight
+weight_cost = 1.8  # Fixed weight
 
 # Input fields for other weights
 weight_roas_diff = st.sidebar.number_input("Weight for ROAS Difference", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
@@ -215,8 +215,8 @@ if new_file and game_code:
             aggregated_data['Lumina_Score'] = (aggregated_data['weighted_sum'] - min_score) / (max_score - min_score + 1e-8) * 100
 
             # Apply penalties
-            aggregated_data.loc[aggregated_data['installs'] < 5, 'Lumina_Score'] *= 0.85
-            aggregated_data.loc[aggregated_data['IPM'] < 0.5, 'Lumina_Score'] *= 0.85
+            aggregated_data.loc[aggregated_data['installs'] < 5, 'Lumina_Score'] *= 0.25
+            aggregated_data.loc[aggregated_data['IPM'] < 5, 'Lumina_Score'] *= 0.85
 
             # Ensure Lumina_Score is between 0 and 100
             aggregated_data['Lumina_Score'] = aggregated_data['Lumina_Score'].clip(0, 100)
