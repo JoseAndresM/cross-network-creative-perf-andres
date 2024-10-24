@@ -215,7 +215,7 @@ if new_file and game_code:
             aggregated_data['Lumina_Score'] = (aggregated_data['weighted_sum'] - min_score) / (max_score - min_score + 1e-8) * 100
 
             # Apply penalties
-            aggregated_data.loc[aggregated_data['installs'] < 5, 'Lumina_Score'] *= 0.85
+            aggregated_data.loc[aggregated_data['installs'] < 10, 'Lumina_Score'] *= 0.50
             aggregated_data.loc[aggregated_data['IPM'] < 0.5, 'Lumina_Score'] *= 0.85
 
             # Ensure Lumina_Score is between 0 and 100
