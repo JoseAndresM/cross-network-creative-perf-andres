@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import re  # Import regular expressions module
+import re
 
 # Function to load previous tested creatives
 def load_tested_creatives(uploaded_file):
@@ -14,34 +14,30 @@ def load_tested_creatives(uploaded_file):
 def calculate_robust_zscore(series):
     median = series.median()
     mad = np.median(np.abs(series - median))
-    return (series - median) / (mad if mad else 1)
+    if mad == 0:
+        return (series - median)
+    else:
+        return (series - median) / mad
 
-# Sigmoid function
-def sigmoid(x):
-    return 1 / (1 + np.exp(-x))
+# Min-max scaling function
+def min_max_scale(series, epsilon=1e-8):
+    return (series - series.min()) / (series.max() - series.min() + epsilon)
 
 # Updated function to extract the creative identifier based on the game code
 def extract_creative_id(name, game_code):
-    # Remove any playables suffixes after '_EN', '_EN_PAD', or '_WW'
-    name = re.split(r'_(EN|EN_PAD|WW|WW_PAD)_', name)[0]
-    parts = name.split('_')
-    try:
-        # Find the index of the game code in the parts
-        index = parts.index(game_code)
-        # Ensure there are enough parts after the game code
-        if index + 2 < len(parts):
-            part_cr = parts[index + 1]
-            part_v = parts[index + 2]
-            # Check if the next parts match 'C<number>' or 'R<number>' and 'V<number>'
-            if re.match(r'^[CR]\d+$', part_cr) and re.match(r'^V\d+$', part_v):
-                return f"{game_code}_{part_cr}_{part_v}"
-            else:
-                return 'unknown'
+    # First, try to find pattern 'game_code_[CRE]<number>_V<number>'
+    pattern = rf'{game_code}_([CRE]\d+_V\d+)'
+    match = re.search(pattern, name)
+    if match:
+        return f"{game_code}_{match.group(1)}"
+    else:
+        # If not found, try to find any occurrence of '[CRE]\d+_V\d+'
+        pattern = r'([CRE]\d+_V\d+)'
+        match = re.search(pattern, name)
+        if match:
+            return f"{game_code}_{match.group(1)}"
         else:
             return 'unknown'
-    except ValueError:
-        # Game code not found in parts
-        return 'unknown'
 
 # Function to categorize creatives
 def categorize_creative(row, average_ipm, average_cost, average_roas_d0, impressions_threshold):
@@ -81,11 +77,12 @@ st.sidebar.header("Weights Settings")
 st.sidebar.write("Adjust the weights for each metric used in the Lumina Score calculation.")
 
 # Spend weight is fixed at +1 (positive to promote scalability)
+weight_cost = 1.0  # Fixed weight
 
 # Input fields for other weights
-weight_roas_diff = st.sidebar.number_input("Weight for ROAS Difference", min_value=-5.0, max_value=5.0, value=1.0, step=0.1)
-weight_roas_mat_d3 = st.sidebar.number_input("Weight for ROAS Maturation D3", min_value=-5.0, max_value=5.0, value=1.0, step=0.1)
-weight_ipm = st.sidebar.number_input("Weight for IPM", min_value=-5.0, max_value=5.0, value=1.0, step=0.1)
+weight_roas_diff = st.sidebar.number_input("Weight for ROAS Difference", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
+weight_roas_mat_d3 = st.sidebar.number_input("Weight for ROAS Maturation D3", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
+weight_ipm = st.sidebar.number_input("Weight for IPM", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
 
 # First-time run toggle
 first_time_run = st.sidebar.checkbox("First-time run (No Previous Tested Creatives CSV)")
@@ -102,18 +99,18 @@ if new_file and game_code:
     if 'creative_network' not in new_data.columns:
         st.error("The uploaded new report CSV does not contain a 'creative_network' column.")
     else:
-        # Step 2: Filter out irrelevant creatives
-        exclude_creative_ids = [
-            'Search SearchPartners', 'Search GoogleSearch', 'Youtube YouTubeVideos',
-            'Display', 'TTCC_0021_Ship Craft - Gaming App'
-        ]
-        # Exclude creatives that start with '3PRewardedPlayable' or '3PPlayable_'
-        new_data = new_data[~new_data['creative_network'].str.startswith(('3PRewardedPlayable', '3PPlayable_'))]
-        new_data = new_data[~new_data['creative_network'].isin(exclude_creative_ids)]
-        new_data = new_data[~new_data['creative_network'].str.startswith('TTCC')]
-
+        # Step 2: Minimal filtering to avoid excluding desired creatives
+        # Adjust filters if needed
+        # exclude_creative_ids = [
+        #     'Search SearchPartners', 'Search GoogleSearch', 'Youtube YouTubeVideos',
+        #     'Display', 'TTCC_0021_Ship Craft - Gaming App'
+        # ]
+        # new_data = new_data[~new_data['creative_network'].isin(exclude_creative_ids)]
+        
         # Step 3: Extract creative IDs using the updated function
-        new_data['creative_id'] = new_data.apply(lambda row: extract_creative_id(row['creative_network'], game_code), axis=1)
+        new_data['creative_id'] = new_data.apply(lambda row: extract_creative_id(str(row['creative_network']), game_code), axis=1)
+
+        # Remove creatives with 'unknown' IDs
         new_data = new_data[new_data['creative_id'] != 'unknown']
 
         # Step 4: Ensure required columns exist before aggregation
@@ -167,22 +164,16 @@ if new_file and game_code:
                                                   0)
 
             # Step 8: Calculate IPM using network_impressions
-            aggregated_data['IPM'] = (aggregated_data['installs'] / aggregated_data['network_impressions']) * 1000
+            aggregated_data['IPM'] = np.where(aggregated_data['network_impressions'] != 0,
+                                              (aggregated_data['installs'] / aggregated_data['network_impressions']) * 1000,
+                                              0)
             aggregated_data['IPM'].replace([float('inf'), -float('inf')], 0, inplace=True)
             aggregated_data['IPM'] = aggregated_data['IPM'].round(2)
-            
-            # Step 9: Exclude outliers in IPM
-            Q1 = aggregated_data['IPM'].quantile(0.25)
-            Q3 = aggregated_data['IPM'].quantile(0.75)
-            IQR = Q3 - Q1
-            lower_bound = Q1 - 1.5 * IQR
-            upper_bound = Q3 + 1.5 * IQR
-            aggregated_data = aggregated_data[(aggregated_data['IPM'] >= lower_bound) & (aggregated_data['IPM'] <= upper_bound)]
-            
-            # Step 10: Calculate ROAS diff using calculated ROAS_d0
+
+            # Step 9: Calculate ROAS diff using calculated ROAS_d0
             aggregated_data['ROAS_diff'] = aggregated_data['ROAS_d0'] - target_roas_d0
 
-            # Step 11: Calculate ROAS Mat D3 using calculated ROAS_d3 and ROAS_d0
+            # Step 10: Calculate ROAS Mat D3 using calculated ROAS_d3 and ROAS_d0
             aggregated_data['ROAS_Mat_D3'] = np.where(
                 aggregated_data['ROAS_d0'] != 0,
                 aggregated_data['ROAS_d3'] / aggregated_data['ROAS_d0'],
@@ -191,24 +182,20 @@ if new_file and game_code:
             aggregated_data['ROAS_Mat_D3'].replace([float('inf'), -float('inf'), np.nan], 0, inplace=True)
             aggregated_data['ROAS_Mat_D3'] = aggregated_data['ROAS_Mat_D3'].round(2)
 
-            # Step 12: Handle NaN values and check for zero MAD before calculating robust z-scores
+            # Step 11: Handle NaN values and check for zero MAD before calculating robust z-scores
             for col in ['ROAS_Mat_D3', 'cost', 'ROAS_diff', 'IPM']:
                 # Replace spaces and dots in column names
                 col_name = col.replace(" ", "_").replace(".", "")
-                mad = np.median(np.abs(aggregated_data[col] - aggregated_data[col].median()))
-                if mad == 0:
-                    aggregated_data[f'z_{col_name}'] = 0
-                else:
-                    aggregated_data[col].fillna(aggregated_data[col].median(), inplace=True)
-                    aggregated_data[f'z_{col_name}'] = calculate_robust_zscore(aggregated_data[col])
+                aggregated_data[col].fillna(aggregated_data[col].median(), inplace=True)
+                aggregated_data[f'z_{col_name}'] = calculate_robust_zscore(aggregated_data[col])
 
-            # Step 13: Cap z-scores at +/-3 to mitigate outliers
-            for col in ['z_cost', 'z_ROAS_diff', 'z_ROAS_Mat_D3', 'z_IPM']:
+            # Step 12: Cap z-scores at +/-3 to mitigate outliers
+            for col in ['z_ROAS_Mat_D3', 'z_cost', 'z_ROAS_diff', 'z_IPM']:
                 aggregated_data[col] = np.clip(aggregated_data[col], -3, 3)
 
-            # Step 14: Use weights on capped z-scores
+            # Step 13: Use weights on capped z-scores
             weights = {
-                'z_cost': 1.8,  # Fixed weight to promote scalability
+                'z_cost': weight_cost,  # Fixed weight to promote scalability
                 'z_ROAS_diff': weight_roas_diff,
                 'z_ROAS_Mat_D3': weight_roas_mat_d3,
                 'z_IPM': weight_ipm
@@ -222,37 +209,40 @@ if new_file and game_code:
                 aggregated_data['z_IPM'] * weights['z_IPM']
             )
 
-            # Step 15: Calculate robust z-score of the weighted sums
-            aggregated_data['weighted_sum_zscore'] = calculate_robust_zscore(aggregated_data['weighted_sum'])
+            # Step 14: Normalize the weighted sum to 0-100
+            min_score = aggregated_data['weighted_sum'].min()
+            max_score = aggregated_data['weighted_sum'].max()
+            aggregated_data['Lumina_Score'] = (aggregated_data['weighted_sum'] - min_score) / (max_score - min_score + 1e-8) * 100
 
-            # Step 16: Apply sigmoid function to the weighted_sum_zscore
-            aggregated_data['Lumina_Score'] = sigmoid(aggregated_data['weighted_sum_zscore']) * 100  # Scale to 0-100
-
-            # Apply 15% penalty for installs < 5
+            # Apply penalties
             aggregated_data.loc[aggregated_data['installs'] < 5, 'Lumina_Score'] *= 0.85
+            aggregated_data.loc[aggregated_data['IPM'] < 0.5, 'Lumina_Score'] *= 0.85
 
-            # Step 17: Calculate averages
+            # Ensure Lumina_Score is between 0 and 100
+            aggregated_data['Lumina_Score'] = aggregated_data['Lumina_Score'].clip(0, 100)
+
+            # Step 15: Calculate averages
             average_ipm = aggregated_data['IPM'].mean()
             average_cost = aggregated_data['cost'].mean()
             average_roas_d0 = aggregated_data['ROAS_d0'].mean()
 
-            # Step 18: Categorize creatives with updated function
+            # Step 16: Categorize creatives with updated function
             aggregated_data['Category'] = aggregated_data.apply(
                 lambda row: categorize_creative(
                     row, average_ipm, average_cost, average_roas_d0, impressions_threshold
                 ), axis=1
             )
             
-            # Step 19: Sort by Lumina Score
+            # Step 17: Sort by Lumina Score
             aggregated_data.sort_values(by='Lumina_Score', ascending=False, inplace=True)
             aggregated_data.reset_index(drop=True, inplace=True)
             aggregated_data.index += 1  # Start index from 1 for ranking
 
-            # Step 20: Output the overall creative performance data as CSV
+            # Step 18: Output the overall creative performance data as CSV
             overall_output = aggregated_data.to_csv(index=False)
             st.download_button("Download Overall Creative Performance CSV", overall_output.encode('utf-8'), "Overall_Creative_Performance.csv")
 
-            # Step 21: Handle recently tested creatives if provided
+            # Step 19: Handle recently tested creatives if provided
             if recent_creatives_input.strip():
                 recent_creatives = [line.strip() for line in recent_creatives_input.strip().split('\n') if line.strip()]
                 recent_data = aggregated_data[aggregated_data['creative_id'].isin(recent_creatives)]
